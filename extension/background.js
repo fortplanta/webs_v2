@@ -17,7 +17,7 @@ function flash(tabId, text, color) {
   setTimeout(() => chrome.action.setBadgeText({ text: '' }), 2500);
 }
 
-async function send(info, tab) {
+export async function send(info, tab) {
   const { serviceUrl, token } = await settings();
   if (!serviceUrl || !token) { chrome.runtime.openOptionsPage(); return; }
 
