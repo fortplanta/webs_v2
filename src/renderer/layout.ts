@@ -4,43 +4,16 @@
 // Layout: KB source cards in a left column; a seed box on top; one column per cluster below it
 // (header box = edge anchor, then fragment slots). Edges are labeled arrows between headers.
 
-import type { FragmentType } from '../types/fragments';
+import { clip, clusterLabel, fragmentLook, FRAG_H, FRAG_W, GAP, HEADER_H, typeColors, wrap, edgeLabel } from './boxes';
+import { cssVar } from './theme';
 import type { WebModel } from './webModel';
 
-export const FRAG_W = 280;
-export const FRAG_H = 150;
-const HEADER_H = 48;
+export { FRAG_H, FRAG_W };
 const SEED_H = 120;
-const GAP = 24;
 const COL_GAP = 120;
 const KB_H = 110;
 
 type Skeleton = Record<string, unknown>;
-
-function cssVar(name: string, fallback: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-}
-
-function typeColors(type: FragmentType): { bg: string; text: string } {
-  return {
-    bg: cssVar(`--color-fragment-${type}-bg`, '#ffffff'),
-    text: cssVar(`--color-fragment-${type}-text`, '#0a0a0a'),
-  };
-}
-
-function wrap(text: string, max: number): string {
-  const lines: string[] = [];
-  let line = '';
-  for (const w of text.split(/\s+/)) {
-    if ((line + ' ' + w).trim().length > max) { lines.push(line); line = w; } else line = (line + ' ' + w).trim();
-  }
-  if (line) lines.push(line);
-  return lines.join('\n');
-}
-
-function clip(text: string, maxChars: number): string {
-  return text.length > maxChars ? text.slice(0, maxChars - 1).trimEnd() + '…' : text;
-}
 
 export function buildSkeletons(m: WebModel): Skeleton[] {
   const out: Skeleton[] = [];
@@ -75,7 +48,8 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
     out.push({
       type: 'rectangle', id: `cluster-${ci}`, x, y: clustersTop, width: FRAG_W, height: HEADER_H,
       strokeColor: '#1a1a1a', backgroundColor: 'transparent', roundness: null,
-      label: { fontFamily: 2, text: cluster.title.toUpperCase(), fontSize: 16, strokeColor: '#1a1a1a' },
+      label: clusterLabel(cluster.title),
+      customData: { kind: 'cluster', index: ci, title: cluster.title },
     });
 
     cluster.slots.forEach((frag, fi) => {
@@ -85,11 +59,11 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
         out.push({ ...base, strokeColor: 'rgba(0,0,0,0.25)', strokeStyle: 'dashed', backgroundColor: 'rgba(0,0,0,0.04)', fillStyle: 'solid' });
         return;
       }
-      const { bg, text } = typeColors(frag.type);
-      const body = frag.type === 'quote' ? frag.body : clip(frag.body, 150);
+      const look = fragmentLook(frag);
       out.push({
-        ...base, strokeColor: 'transparent', backgroundColor: bg, fillStyle: 'solid',
-        label: { fontFamily: 2, text: `${frag.type.toUpperCase()}\n${frag.title}\n\n${wrap(body, 36)}`, fontSize: 12, strokeColor: text, textAlign: 'left', verticalAlign: 'top' },
+        ...base, strokeColor: 'transparent', backgroundColor: look.backgroundColor, fillStyle: 'solid',
+        label: look.label,
+        customData: { kind: 'fragment', cluster: ci, slot: fi, fragment: frag },
       });
     });
   });
@@ -101,7 +75,7 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
       type: 'arrow', id: `edge-${i}`, x: 0, y: 0,
       start: { id: `cluster-${edge.source}` }, end: { id: `cluster-${edge.target}` },
       strokeColor: '#1a1a1a',
-      ...(edge.label ? { label: { fontFamily: 2, text: edge.label, fontSize: 14 } } : {}),
+      ...(edge.label ? { label: edgeLabel(edge.label) } : {}),
     });
   });
 

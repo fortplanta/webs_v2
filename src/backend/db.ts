@@ -17,7 +17,27 @@ const MIGRATIONS: string[] = [
    );
    CREATE INDEX webs_updated ON webs (updated_at DESC);`,
   `CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`,
+  // fragment_count is what the library shows. Once the scene carries structured box data
+  // (customData), manual edits change the count, so the scene becomes its source.
+  `ALTER TABLE webs ADD COLUMN fragment_count INTEGER;
+   ALTER TABLE webs ADD COLUMN count_from_scene INTEGER NOT NULL DEFAULT 0;`,
 ];
+
+function countModelFragments(model: WebModel): number {
+  return model.clusters.reduce((n, c) => n + c.slots.filter(Boolean).length, 0);
+}
+
+/** null if the scene has no structured box data (older scenes, or none yet). */
+function countSceneFragments(scene: unknown[]): number | null {
+  let hasData = false, count = 0;
+  for (const e of scene as Array<{ isDeleted?: boolean; customData?: { kind?: string } }>) {
+    const kind = e?.customData?.kind;
+    if (kind !== 'fragment' && kind !== 'cluster') continue;
+    hasData = true;
+    if (kind === 'fragment' && !e.isDeleted) count++;
+  }
+  return hasData ? count : null;
+}
 
 export class WebStore {
   private db: DatabaseSync;
@@ -45,11 +65,20 @@ export class WebStore {
 
   save(input: SaveWebInput, now = Date.now()): void {
     // A run that was interrupted (app closed mid-generation) must not reopen as "running".
-    const model = input.model && input.model.phase === 'running' ? { ...input.model, phase: 'cancelled', status: '' } : input.model;
+    const model = input.model && input.model.phase === 'running' ? { ...input.model, phase: 'cancelled' as const, status: '' } : input.model;
+    const prev = this.db.prepare('SELECT fragment_count, count_from_scene FROM webs WHERE id = ?').get(input.id) as { fragment_count: number | null; count_from_scene: number } | undefined;
+    const sceneCount = input.scene ? countSceneFragments(input.scene) : null;
+    let fragmentCount = prev?.fragment_count ?? null;
+    let fromScene = prev?.count_from_scene ?? 0;
+    if (sceneCount !== null) { fragmentCount = sceneCount; fromScene = 1; }
+    else if (model && !fromScene) fragmentCount = countModelFragments(model);
+
     this.db.prepare(
-      `INSERT INTO webs (id, query, model, scene, created_at, updated_at)
-       VALUES (?, ?, COALESCE(?, 'null'), COALESCE(?, '[]'), ?, ?)
+      `INSERT INTO webs (id, query, model, scene, created_at, updated_at, fragment_count, count_from_scene)
+       VALUES (?, ?, COALESCE(?, 'null'), COALESCE(?, '[]'), ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
+         fragment_count = excluded.fragment_count,
+         count_from_scene = excluded.count_from_scene,
          query = excluded.query,
          model = COALESCE(?, model),
          scene = COALESCE(?, scene),
@@ -57,18 +86,18 @@ export class WebStore {
     ).run(
       input.id, input.query,
       model ? JSON.stringify(model) : null, input.scene ? JSON.stringify(input.scene) : null,
-      now, now,
+      now, now, fragmentCount, fromScene,
       model ? JSON.stringify(model) : null, input.scene ? JSON.stringify(input.scene) : null,
     );
   }
 
   list(): SavedWebSummary[] {
-    const rows = this.db.prepare('SELECT id, query, model, updated_at FROM webs WHERE model != \'null\' ORDER BY updated_at DESC').all() as Array<{ id: string; query: string; model: string; updated_at: number }>;
-    return rows.map(r => {
-      const m = JSON.parse(r.model) as WebModel | null;
-      const fragmentCount = m ? m.clusters.reduce((n, c) => n + c.slots.filter(Boolean).length, 0) : 0;
-      return { id: r.id, query: r.query, updatedAt: r.updated_at, fragmentCount };
-    });
+    const rows = this.db.prepare('SELECT id, query, model, updated_at, fragment_count FROM webs WHERE model != \'null\' ORDER BY updated_at DESC').all() as Array<{ id: string; query: string; model: string; updated_at: number; fragment_count: number | null }>;
+    return rows.map(r => ({
+      id: r.id, query: r.query, updatedAt: r.updated_at,
+      // Rows saved before fragment_count existed fall back to counting the model.
+      fragmentCount: r.fragment_count ?? countModelFragments(JSON.parse(r.model) as WebModel),
+    }));
   }
 
   get(id: string): SavedWeb | null {

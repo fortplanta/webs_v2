@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SavedWebSummary } from '../types/ipc';
 import { CanvasView } from './CanvasView';
 import { SettingsView } from './SettingsView';
+import { hydrateScene } from './sceneEdit';
 import { initialModel, progress, reduce, type WebModel } from './webModel';
 
 const MODEL_SAVE_DEBOUNCE_MS = 400;
@@ -78,7 +79,7 @@ export function App() {
     if (!saved) { refreshLibrary(); return; }
     idRef.current = id;
     setWebId(id);
-    setRestoredScene(saved.scene);
+    setRestoredScene(hydrateScene(saved.scene as any[], saved.model));
     setCurrent(saved.model);
   }
 

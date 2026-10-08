@@ -45,3 +45,17 @@ body { font-family: var(--font-primary); background: var(--color-canvas); color:
 .settings button.link { padding: 0; background: none; color: var(--color-interactive); text-decoration: underline; }
 .settings .row button { background: var(--color-surface); color: var(--color-text); border: 1px solid var(--color-border-default); }
 .screen { position: relative; }
+.canvas { position: relative; }
+.canvas-inner { position: absolute; inset: 0; }
+.canvas-tools { position: absolute; left: 50%; bottom: var(--spacing-base); transform: translateX(-50%); display: flex; align-items: center; gap: var(--spacing-base); background: var(--color-bg-overlay); border: 1px solid var(--color-border-default); padding: var(--spacing-xs) var(--spacing-sm); box-shadow: var(--shadow-toolbar); font-size: var(--font-size-tag); z-index: 5; max-width: 90vw; }
+.canvas-tools button, .editor button { font: inherit; padding: var(--spacing-xs) var(--spacing-base); border: 0; background: var(--color-interactive); color: #fff; cursor: pointer; }
+.canvas-tools button:disabled { opacity: var(--prominence-tertiary); }
+.canvas-tools .hint { color: var(--color-text-secondary); }
+.editor { position: absolute; top: 64px; right: var(--spacing-base); width: 320px; max-height: calc(100% - 96px); overflow: auto; background: var(--color-surface); border: 1px solid var(--color-border-default); box-shadow: var(--shadow-toolbar); padding: var(--spacing-base); display: flex; flex-direction: column; gap: var(--spacing-sm); z-index: 10; }
+.editor-head { display: flex; justify-content: space-between; align-items: center; }
+.editor label { display: flex; flex-direction: column; gap: var(--spacing-xs); font-size: var(--font-size-tag); color: var(--color-text-secondary); }
+.editor input, .editor select, .editor textarea { font: inherit; font-size: var(--font-size-body); color: var(--color-text); padding: var(--spacing-sm); border: 1px solid var(--color-border-default); background: var(--color-surface); resize: vertical; }
+.editor .meta { opacity: var(--prominence-tertiary); }
+.editor-actions { display: flex; justify-content: space-between; gap: var(--spacing-sm); margin-top: var(--spacing-xs); }
+.editor button.plain { background: none; color: var(--color-text); font-size: 20px; line-height: 1; padding: 0 var(--spacing-xs); }
+.editor button.danger { background: transparent; color: var(--color-error); border: 1px solid var(--color-error); }

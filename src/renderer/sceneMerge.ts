@@ -9,10 +9,13 @@ type El = Record<string, any>;
 /** Convert skeletons, then give bound label text deterministic ids (`<containerId>-label`). */
 export function convertWithStableIds(skeletons: unknown[]): El[] {
   const els = convertToExcalidrawElements(skeletons as any, { regenerateIds: false }) as unknown as El[];
+  // Safeguard: structured box data must survive conversion.
+  const data = new Map((skeletons as El[]).filter(k => k.customData).map(k => [k.id as string, k.customData]));
   const rename = new Map<string, string>();
   for (const el of els) if (el.type === 'text' && el.containerId) rename.set(el.id, `${el.containerId}-label`);
   const mapped = els.map(el => {
     const next = { ...el };
+    if (data.has(el.id) && !el.customData) next.customData = data.get(el.id);
     if (rename.has(el.id)) next.id = rename.get(el.id);
     if (Array.isArray(el.boundElements)) {
       next.boundElements = el.boundElements.map((b: El) => (rename.has(b.id) ? { ...b, id: rename.get(b.id) } : b));
