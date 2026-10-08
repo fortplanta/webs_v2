@@ -1,0 +1,17 @@
+html, body, #root { height: 100%; margin: 0; }
+body { font-family: var(--font-primary); background: var(--color-canvas); color: var(--color-text); }
+.screen { height: 100%; display: flex; flex-direction: column; }
+.query { margin: auto; width: min(560px, 90vw); display: flex; flex-direction: column; gap: var(--spacing-base); }
+.query h1 { font-size: var(--font-size-header); font-weight: var(--font-weight-regular); letter-spacing: var(--tracking-tight); margin: 0; }
+.query form { display: flex; gap: var(--spacing-sm); }
+.query input { flex: 1; font: inherit; padding: var(--spacing-sm) var(--spacing-base); border: 1px solid var(--color-border-default); background: var(--color-surface); }
+.query button, .bar button { font: inherit; padding: var(--spacing-sm) var(--spacing-base); border: 0; background: var(--color-interactive); color: #fff; cursor: pointer; }
+.query button:disabled { opacity: var(--prominence-tertiary); cursor: progress; }
+.error { color: var(--color-error); background: var(--color-error-dim); padding: var(--spacing-sm) var(--spacing-base); font-size: var(--font-size-tag); }
+.bar { display: flex; align-items: center; gap: var(--spacing-base); padding: var(--spacing-sm) var(--spacing-base); background: var(--color-surface); border-bottom: 1px solid var(--color-border-default); font-size: var(--font-size-tag); }
+.bar button { background: transparent; color: var(--color-interactive); padding: 0; }
+.canvas { flex: 1; min-height: 0; }
+.bar .q { font-weight: 600; }
+.bar .status { display: flex; align-items: center; gap: var(--spacing-sm); color: var(--color-text-secondary); }
+.bar .dot { width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--color-interactive); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.2; } }

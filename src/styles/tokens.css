@@ -1,0 +1,158 @@
+/* webs-tokens.css — CSS custom properties, source of truth
+   All values from CLAUDE.md. Do not hardcode these values in components.
+   Canvas/surface/UI chrome colors marked TODO must be derived from /skills/. */
+
+:root {
+
+  /* ─── Spacing ─────────────────────────────────────────────── */
+  --spacing-none: 0px;
+  --spacing-xxs:  2px;
+  --spacing-xs:   4px;
+  --spacing-sm:   8px;
+  --spacing-base: 16px;
+  --spacing-md:   24px;
+  --spacing-lg:   32px;
+  --spacing-xl:   48px;
+  --spacing-xxl:  64px;
+
+  /* ─── Sizes ───────────────────────────────────────────────── */
+  --size-header-height:       32px;
+  --size-header-pad-x:        14px;
+  --size-tag-height:          22px;
+  --size-tag-pad-x:           8px;
+  --size-image-height:        240px;
+  --size-image-height-small:  200px;
+
+  /* ─── Typography ──────────────────────────────────────────── */
+  --font-primary:             "Neue Haas Unica", "Helvetica Neue", Arial, sans-serif;
+  --font-size-header:         20px;
+  --font-size-body:           16px;
+  --font-size-tag:            12px;
+  --font-size-disclaimer:     11px;
+  --font-size-meta:           10px;
+  --font-weight-regular:      400;
+  --line-height-tight:        1;
+  --line-height-normal:       1.3;
+  --line-height-relaxed:      1.5;
+  --tracking-tight:           -0.05em;
+  --tracking-normal:          -0.01em;
+  --tracking-wide:            0.05em;
+
+  /* ─── Color prominence (opacity multipliers) ─────────────── */
+  --prominence-full:          1;
+  --prominence-secondary:     0.75;
+  --prominence-tertiary:      0.58;
+  --prominence-quaternary:    0.28;
+  --prominence-disabled:      0.1;
+
+  /* ─── Fragment type colors ────────────────────────────────── */
+  --color-fragment-person-bg:    #00E87B;
+  --color-fragment-person-text:  #0a0a0a;
+  --color-fragment-concept-bg:   #FF6D00;
+  --color-fragment-concept-text: #0a0a0a;
+  --color-fragment-thesis-bg:    #FF3B30;
+  --color-fragment-thesis-text:  #ffffff;
+  --color-fragment-source-bg:    #00D4FF;
+  --color-fragment-source-text:  #0a0a0a;
+  --color-fragment-event-bg:     #FF9F0A;
+  --color-fragment-event-text:   #0a0a0a;
+  --color-fragment-era-bg:       #BF5AF2;
+  --color-fragment-era-text:     #ffffff;
+  --color-fragment-domain-bg:    #1a1a1a;
+  --color-fragment-domain-text:  rgba(255, 255, 255, 0.75);
+  --color-fragment-quote-bg:     #2563EB;
+  --color-fragment-quote-text:   #ffffff;
+
+  /* ─── Seed fragment ───────────────────────────────────────── */
+  --color-seed-bg:               #D2F34C;
+  --color-seed-text:             #0a0a0a;
+
+  /* ─── Slot colors ─────────────────────────────────────────── */
+  /* TODO: derive exact values from /skills/ */
+  --color-slot-bg:               #ffffff;
+  --color-slot-border:           rgba(0, 0, 0, 0.1);
+  --color-disclaimer-bg:         #f5f5f5;
+
+  /* ─── Canvas & surfaces ───────────────────────────────────── */
+  /* TODO: derive from /skills/ */
+  --color-canvas:                #f8f8f8;
+  --color-canvas-dot:            #cbcbcb;
+  --color-surface:               #ffffff;
+
+  /* ─── Text ────────────────────────────────────────────────── */
+  /* TODO: derive from /skills/ */
+  --color-text:                  #000000;
+  --color-text-secondary:        rgba(0, 0, 0, 0.58);
+
+  /* ─── Edges ───────────────────────────────────────────────── */
+  --color-edge:                  rgba(0, 0, 0, 0.15);
+  --color-edge-midpoint:         rgba(0, 0, 0, 0.3);
+
+  /* ─── Semantic UI tokens ─────────────────────────────────── */
+  --color-interactive:      #8A38F5;
+  --color-interactive-dim:  rgba(138, 56, 245, 0.12);
+  --color-error:            #FF0207;
+  --color-error-dim:        rgba(255, 2, 7, 0.12);
+  --color-text-primary:     #000000;
+  --color-text-tertiary:    rgba(0, 0, 0, 0.45);
+  --color-bg-overlay:       rgba(255, 255, 255, 0.97);
+  --color-bg-elevated:      #ffffff;
+  --color-border-default:   rgba(0, 0, 0, 0.1);
+  --color-border-subtle:    rgba(0, 0, 0, 0.04);
+
+  /* ─── Radius scale ────────────────────────────────────────── */
+  --radius-none:  0px;
+  --radius-sm:    2px;
+  --radius-lg:    12px;
+  --radius-full:  9999px;
+
+  /* ─── Fragment discovery accent ──────────────────────────── */
+  --fragment-discovery:     #D2F34C;
+
+  /* ─── Neurodive component aliases ────────────────────────── */
+  /* Bridge so nd/ components resolve their tokens against webs vars */
+  --surface:      var(--color-surface);
+  --surface-alt:  #ededed;
+  --surface-mute: #f7f7f7;
+  --fg:           var(--color-text);
+  --fg-strong:    #0f172a;
+  --fg-2:         rgba(0,0,0,0.65);
+  --fg-3:         rgba(0,0,0,0.45);
+  --fg-4:         rgba(0,0,0,0.25);
+  --fg-invert:    #ffffff;
+  --fg-mute:      rgba(0,0,0,0.41);
+  --hairline:     rgba(0,0,0,0.1);
+  --hairline-2:   rgba(0,0,0,0.04);
+  --radius:       0;
+  --radius-soft:  4px;
+  --stroke:       1px solid var(--hairline);
+  --stroke-soft:  1px solid var(--hairline-2);
+  --shadow-card:    2px 2px 14px 0 rgba(0,0,0,0.07);
+  --shadow-toolbar: 0 4px 6px -2px rgba(0,0,0,0.05), 0 10px 15px -3px rgba(0,0,0,0.10);
+  --shadow-lift:    0 1px 2px 0 rgba(0,0,0,0.05);
+  --ease:       cubic-bezier(0.2, 0, 0.2, 1);
+  --dur-fast:   80ms;
+  --dur:        140ms;
+  --dur-slow:   200ms;
+  --focus-ring: 1px dashed rgb(138,56,245);
+  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
+  --s-12: 48px;
+  --font-sans:  var(--font-primary);
+  --font-meta:  var(--font-primary);
+  --font-mono:  "Menlo", "SF Mono", ui-monospace, monospace;
+  --fs-body:    var(--font-size-body);
+  --fs-small:   var(--font-size-tag);
+  --fs-h4:      20px;
+  --ls-body:    var(--tracking-normal);
+  --ls-small:   var(--tracking-normal);
+  --ls-h4:      var(--tracking-tight);
+  --lh-body:    var(--line-height-normal);
+  /* Neurodive signal colors */
+  --signal-danger:    #FF0207;
+  --signal-highlight: #001EFF;
+  --signal-loading-a: rgb(255,204,204);
+  --signal-loading-b: rgb(0,68,255);
+  --signal-loading-c: rgb(111,255,166);
+
+}
