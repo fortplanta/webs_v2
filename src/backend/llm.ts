@@ -3,6 +3,7 @@
 // Timeouts are idle-based: a long generation that keeps producing tokens is never killed.
 
 import { WebsError } from './errors';
+import { getSettings } from './settings';
 
 export interface LlmOptions {
   system: string;
@@ -19,17 +20,14 @@ export interface LlmService {
   call(opts: LlmOptions, signal?: AbortSignal): Promise<string>;
 }
 
-const DEFAULT_BASE_URL = 'http://localhost:11434';
-const DEFAULT_MODEL = 'qwen3:8b';
-const DEFAULT_IDLE_MS = 30_000; // max silence between chunks
 const DEFAULT_FIRST_TOKEN_MS = 60_000; // allows for a cold model load
 
 export function llmModelName(): string {
-  return process.env.WEBS_LLM_MODEL?.trim() || DEFAULT_MODEL;
+  return getSettings().ollama.model;
 }
 
 function baseUrl(): string {
-  return (process.env.WEBS_LLM_BASE_URL?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, '');
+  return getSettings().ollama.baseUrl.replace(/\/+$/, '');
 }
 
 function envMs(name: string, fallback: number): number {
@@ -47,7 +45,7 @@ export async function* streamOllama(
   { system, user, maxTokens = 3000, json = false, temperature = 0.7 }: LlmOptions,
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
-  const idleMs = envMs('WEBS_LLM_IDLE_TIMEOUT_MS', DEFAULT_IDLE_MS);
+  const idleMs = getSettings().ollama.idleTimeoutSec * 1000; // max silence between chunks
   const firstMs = envMs('WEBS_LLM_FIRST_TOKEN_TIMEOUT_MS', DEFAULT_FIRST_TOKEN_MS);
   const controller = new AbortController();
   let timedOut = false;
@@ -134,4 +132,16 @@ export async function warmUp(): Promise<void> {
       body: JSON.stringify({ model: llmModelName(), keep_alive: '30m' }),
     });
   } catch { /* Ollama offline — the real request will report it */ }
+}
+
+/** Models installed in the Ollama instance at `url` (defaults to the configured one). */
+export async function listOllamaModels(url: string = baseUrl()): Promise<{ ok: true; models: string[] } | { ok: false; message: string }> {
+  try {
+    const res = await fetch(`${url.replace(/\/+$/, '')}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return { ok: false, message: `Ollama returned ${res.status}.` };
+    const data = (await res.json()) as { models?: Array<{ name?: string }> };
+    return { ok: true, models: (data.models ?? []).map(m => m.name ?? '').filter(Boolean).sort() };
+  } catch {
+    return { ok: false, message: `Can't reach Ollama at ${url}.` };
+  }
 }

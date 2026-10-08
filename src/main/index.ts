@@ -1,7 +1,11 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { runStrategy } from '../backend/strategies';
-import { warmUp } from '../backend/llm';
+import { runStrategy, strategies } from '../backend/strategies';
+import { listOllamaModels, warmUp } from '../backend/llm';
+import { listKbModules } from '../backend/kb';
+import { defaultSettings, getSettings, getSettingsOverrides, mergePatches, setSettingsOverrides, validatePatch } from '../backend/settings';
+import type { SaveSettingsResult, SettingsBundle, SettingsPatch } from '../types/settings';
 import { WebStore } from '../backend/db';
 
 // KB lives next to the project in dev; override with WEBS_KB_DIR.
@@ -32,6 +36,41 @@ ipcMain.handle('webs:load', (_e, id: string) => store.get(id));
 ipcMain.handle('webs:save', (_e, input) => store.save(input));
 ipcMain.handle('webs:delete', (_e, id: string) => store.delete(id));
 
+const SETTINGS_KEY = 'settings';
+
+async function settingsBundle(): Promise<SettingsBundle> {
+  const settings = getSettings();
+  return { settings, defaults: defaultSettings(), strategies: Object.keys(strategies), modules: await listKbModules(settings.kb.dir) };
+}
+
+ipcMain.handle('settings:get', () => settingsBundle());
+
+ipcMain.handle('settings:save', async (_e, patch: SettingsPatch): Promise<SaveSettingsResult> => {
+  const { value, errors } = validatePatch(patch, Object.keys(strategies));
+  if (value.kb?.dir !== undefined && !errors['kb.dir']) {
+    const isDir = await fs.stat(value.kb.dir).then(st => st.isDirectory(), () => false);
+    if (!isDir) errors['kb.dir'] = 'That folder does not exist.';
+  }
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  const next = mergePatches(getSettingsOverrides(), value);
+  store.setSetting(SETTINGS_KEY, next);
+  setSettingsOverrides(next);
+  return { ok: true, bundle: await settingsBundle() };
+});
+
+ipcMain.handle('settings:reset', async () => {
+  store.deleteSetting(SETTINGS_KEY);
+  setSettingsOverrides({});
+  return settingsBundle();
+});
+
+ipcMain.handle('settings:ollama-models', (_e, baseUrl: string) => listOllamaModels(baseUrl));
+ipcMain.handle('settings:kb-modules', (_e, dir: string) => listKbModules(dir));
+ipcMain.handle('settings:pick-kb-folder', async () => {
+  const r = await dialog.showOpenDialog({ properties: ['openDirectory'], defaultPath: getSettings().kb.dir });
+  return r.canceled ? null : r.filePaths[0];
+});
+
 let lastWarm = 0;
 function warmOnce() {
   if (Date.now() - lastWarm < 5 * 60_000) return;
@@ -56,6 +95,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   store = new WebStore(process.env.WEBS_DB?.trim() || path.join(app.getPath('userData'), 'webs.db'));
+  setSettingsOverrides(store.getSetting<SettingsPatch>(SETTINGS_KEY) ?? {});
   warmOnce();
   createWindow();
 });

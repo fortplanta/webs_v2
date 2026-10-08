@@ -16,6 +16,7 @@ const MIGRATIONS: string[] = [
      updated_at INTEGER NOT NULL
    );
    CREATE INDEX webs_updated ON webs (updated_at DESC);`,
+  `CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);`,
 ];
 
 export class WebStore {
@@ -80,6 +81,19 @@ export class WebStore {
 
   delete(id: string): void {
     this.db.prepare('DELETE FROM webs WHERE id = ?').run(id);
+  }
+
+  getSetting<T>(key: string): T | null {
+    const r = this.db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
+    return r ? (JSON.parse(r.value) as T) : null;
+  }
+
+  setSetting(key: string, value: unknown): void {
+    this.db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, JSON.stringify(value));
+  }
+
+  deleteSetting(key: string): void {
+    this.db.prepare('DELETE FROM settings WHERE key = ?').run(key);
   }
 
   close(): void {

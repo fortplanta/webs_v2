@@ -24,6 +24,12 @@ const api: WebsApi = {
   loadWeb: id => ipcRenderer.invoke('webs:load', id),
   saveWeb: input => ipcRenderer.invoke('webs:save', input),
   deleteWeb: id => ipcRenderer.invoke('webs:delete', id),
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  saveSettings: patch => ipcRenderer.invoke('settings:save', patch),
+  resetSettings: () => ipcRenderer.invoke('settings:reset'),
+  listOllamaModels: baseUrl => ipcRenderer.invoke('settings:ollama-models', baseUrl),
+  listKbModules: dir => ipcRenderer.invoke('settings:kb-modules', dir),
+  pickKbFolder: () => ipcRenderer.invoke('settings:pick-kb-folder'),
 };
 
 contextBridge.exposeInMainWorld('webs', api);

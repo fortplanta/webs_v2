@@ -7,6 +7,8 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { KbPassage } from './events';
+import { getSettings } from './settings';
+import type { KbModuleInfo } from '../types/settings';
 
 export interface KbService {
   search(query: string): Promise<KbPassage[]>;
@@ -18,8 +20,25 @@ const STOPWORDS = new Set(
   'a an and are as at be by for from how in is it of on or that the to was what when where which who why with'.split(' '),
 );
 
+export const ROOT_MODULE = '(root)';
+
 export function kbDir(): string {
-  return process.env.WEBS_KB_DIR?.trim() || path.resolve(process.cwd(), 'kb');
+  return getSettings().kb.dir;
+}
+
+/** A KB module is a top-level folder; markdown files directly in the KB folder form "(root)". */
+export function moduleOf(relPath: string): string {
+  const parts = relPath.split(path.sep);
+  return parts.length > 1 ? parts[0] : ROOT_MODULE;
+}
+
+export async function listKbModules(dir: string = kbDir()): Promise<KbModuleInfo[]> {
+  const counts = new Map<string, number>();
+  for (const file of await listMarkdown(dir)) {
+    const m = moduleOf(path.relative(dir, file));
+    counts.set(m, (counts.get(m) ?? 0) + 1);
+  }
+  return [...counts].map(([name, files]) => ({ name, files })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function tokenize(text: string): string[] {
@@ -39,7 +58,11 @@ async function listMarkdown(dir: string): Promise<string[]> {
 }
 
 /** Best-matching KB passages, structured. Empty if nothing matches or the KB is empty. */
-export async function searchPassages(query: string, dir: string = kbDir()): Promise<KbPassage[]> {
+export async function searchPassages(
+  query: string,
+  dir: string = kbDir(),
+  disabledModules: string[] = getSettings().kb.disabledModules,
+): Promise<KbPassage[]> {
   const terms = [...new Set(tokenize(query))];
   if (terms.length === 0) return [];
 
@@ -47,6 +70,7 @@ export async function searchPassages(query: string, dir: string = kbDir()): Prom
   for (const file of await listMarkdown(dir)) {
     const raw = await fs.readFile(file, 'utf8').catch(() => '');
     const source = path.relative(dir, file);
+    if (disabledModules.includes(moduleOf(source))) continue;
     for (const para of raw.split(/\n\s*\n/)) {
       const text = para.trim();
       if (!text || /^#+\s/.test(text) && !text.includes('\n')) continue; // bare headings carry no content

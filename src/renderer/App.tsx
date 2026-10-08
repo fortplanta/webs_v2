@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SavedWebSummary } from '../types/ipc';
 import { CanvasView } from './CanvasView';
+import { SettingsView } from './SettingsView';
 import { initialModel, progress, reduce, type WebModel } from './webModel';
 
 const MODEL_SAVE_DEBOUNCE_MS = 400;
@@ -20,6 +21,7 @@ export function App() {
   const [webId, setWebId] = useState<string | null>(null);
   const [restoredScene, setRestoredScene] = useState<unknown[] | undefined>(undefined);
   const [library, setLibrary] = useState<SavedWebSummary[]>([]);
+  const [showSettings, setShowSettings] = useState(false);
 
   const cancel = useRef<(() => void) | null>(null);
   const modelRef = useRef<WebModel | null>(null);
@@ -103,6 +105,8 @@ export function App() {
     if (m && id) void window.webs.saveWeb({ id, query: m.query, scene: elements });
   }, []);
 
+  if (showSettings) return <SettingsView onClose={() => setShowSettings(false)} />;
+
   if (model && webId) {
     const { filled, total } = progress(model);
     const running = model.phase === 'running';
@@ -133,6 +137,7 @@ export function App() {
 
   return (
     <div className="screen">
+      <button className="settings-link" onClick={() => setShowSettings(true)}>Settings</button>
       <div className="query">
         <h1>What do you want to explore?</h1>
         <form onSubmit={e => { e.preventDefault(); if (query.trim()) start(query.trim()); }}>

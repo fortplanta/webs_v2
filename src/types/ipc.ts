@@ -1,5 +1,6 @@
 import type { WebEvent } from '../backend/events';
 import type { WebModel } from './web';
+import type { KbModuleInfo, OllamaModelsResult, SaveSettingsResult, SettingsBundle, SettingsPatch } from './settings';
 
 /** Excalidraw elements as stored; opaque to the backend. */
 export type SceneElements = unknown[];
@@ -35,4 +36,14 @@ export interface WebsApi {
   loadWeb(id: string): Promise<SavedWeb | null>;
   saveWeb(input: SaveWebInput): Promise<void>;
   deleteWeb(id: string): Promise<void>;
+
+  getSettings(): Promise<SettingsBundle>;
+  /** Validates and persists the changed fields; applies to the next generation. */
+  saveSettings(patch: SettingsPatch): Promise<SaveSettingsResult>;
+  /** Clears all saved overrides (env/built-in defaults apply again). */
+  resetSettings(): Promise<SettingsBundle>;
+  listOllamaModels(baseUrl: string): Promise<OllamaModelsResult>;
+  listKbModules(dir: string): Promise<KbModuleInfo[]>;
+  /** Native folder picker; resolves to null if cancelled. */
+  pickKbFolder(): Promise<string | null>;
 }

@@ -3,7 +3,8 @@
 
 import { WebsError } from '../errors';
 import type { WebEvent } from '../events';
-import { defaultWebConfig, type WebConfig } from '../config';
+import type { WebConfig } from '../config';
+import { getSettings } from '../settings';
 import { fileKb, type KbService } from '../kb';
 import { ollamaLlm, type LlmService } from '../llm';
 import { progressive } from './progressive';
@@ -21,7 +22,8 @@ export interface RunOptions {
 
 /** Runs a strategy and guarantees the stream ends with exactly one 'done' or 'error' event (none if cancelled). */
 export async function* runStrategy(query: string, opts: RunOptions): AsyncGenerator<WebEvent> {
-  const name = opts.strategy ?? (process.env.WEBS_STRATEGY?.trim() || 'progressive');
+  const { generation } = getSettings();
+  const name = opts.strategy ?? generation.strategy;
   const strategy = strategies[name];
   if (!strategy) {
     yield { type: 'error', code: 'ollama-error', message: `Unknown strategy "${name}".` };
@@ -31,7 +33,7 @@ export async function* runStrategy(query: string, opts: RunOptions): AsyncGenera
     yield* strategy({
       query,
       signal: opts.signal,
-      config: opts.config ?? defaultWebConfig,
+      config: opts.config ?? { clusterCount: generation.clusterCount, fragmentsPerCluster: generation.fragmentsPerCluster },
       kb: opts.kb ?? fileKb,
       llm: opts.llm ?? ollamaLlm,
     });
