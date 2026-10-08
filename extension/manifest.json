@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Send to Webs",
+  "version": "0.1.0",
+  "description": "Send a selection, link or page to your Webs capture inbox.",
+  "permissions": ["contextMenus", "storage", "activeTab", "scripting"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_title": "Send this page (or selection) to Webs" },
+  "options_ui": { "page": "options.html", "open_in_tab": true }
+}

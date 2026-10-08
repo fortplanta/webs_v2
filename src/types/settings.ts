@@ -2,6 +2,8 @@ export interface Settings {
   ollama: { baseUrl: string; model: string; idleTimeoutSec: number };
   kb: { dir: string; disabledModules: string[] };
   generation: { strategy: string; clusterCount: number; fragmentsPerCluster: number };
+  /** The webs-capture service. Empty url = capture inbox disabled (no network traffic). */
+  capture: { url: string; token: string };
 }
 
 export type SettingsPatch = {

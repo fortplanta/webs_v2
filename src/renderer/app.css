@@ -59,3 +59,18 @@ body { font-family: var(--font-primary); background: var(--color-canvas); color:
 .editor-actions { display: flex; justify-content: space-between; gap: var(--spacing-sm); margin-top: var(--spacing-xs); }
 .editor button.plain { background: none; color: var(--color-text); font-size: 20px; line-height: 1; padding: 0 var(--spacing-xs); }
 .editor button.danger { background: transparent; color: var(--color-error); border: 1px solid var(--color-error); }
+
+.canvas-tools button.secondary { background: transparent; color: var(--color-interactive); border: 1px solid var(--color-interactive); }
+.canvas-tools button.secondary[aria-pressed=true] { background: var(--color-interactive-dim); }
+.editor .field-error { font-size: var(--font-size-tag); color: var(--color-error); }
+.editor .hint { font-size: var(--font-size-tag); color: var(--color-text-secondary); }
+.editor a { color: var(--color-interactive); }
+.inbox-actions, .inbox-row { display: flex; gap: var(--spacing-sm); align-items: center; }
+.inbox-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--spacing-sm); }
+.inbox-list li { border: 1px solid var(--color-border-default); padding: var(--spacing-sm); display: flex; flex-direction: column; gap: var(--spacing-xs); }
+.inbox-title { font-weight: 600; word-break: break-word; }
+.inbox-snippet { font-size: var(--font-size-tag); color: var(--color-text-secondary); word-break: break-word; }
+.editor button.plain-link { background: none; color: var(--color-interactive); padding: 0; text-decoration: underline; }
+.editor button:disabled { opacity: var(--prominence-tertiary); cursor: default; }
+.canvas-tools button { white-space: nowrap; flex-shrink: 0; }
+.canvas-tools .hint { min-width: 0; }

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Send to Webs — settings</title>
+  <style>
+    body { font: 14px/1.4 system-ui, sans-serif; max-width: 480px; margin: 40px auto; padding: 0 16px; color: #111; }
+    label { display: block; margin: 16px 0 4px; font-weight: 600; }
+    input { width: 100%; box-sizing: border-box; padding: 8px; font: inherit; }
+    button { margin-top: 16px; margin-right: 8px; padding: 8px 16px; font: inherit; }
+    #status { margin-top: 16px; min-height: 1.4em; }
+    .err { color: #c0392b; } .ok { color: #2e8b57; } small { color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Send to Webs</h1>
+  <p><small>Right-click a selection, link or page → <b>Send to Webs</b>, or click the toolbar button. Captures land in your capture service's inbox.</small></p>
+  <label for="url">Capture service URL</label>
+  <input id="url" placeholder="http://localhost:8787" spellcheck="false" />
+  <label for="token">Token</label>
+  <input id="token" type="password" autocomplete="off" spellcheck="false" />
+  <button id="save">Save</button><button id="test">Test connection</button>
+  <div id="status" role="status"></div>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

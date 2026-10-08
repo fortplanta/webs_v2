@@ -23,6 +23,10 @@ export function defaultSettings(): Settings {
       clusterCount: defaultWebConfig.clusterCount,
       fragmentsPerCluster: defaultWebConfig.fragmentsPerCluster,
     },
+    capture: {
+      url: process.env.WEBS_CAPTURE_URL?.trim() || '',
+      token: process.env.WEBS_CAPTURE_TOKEN?.trim() || '',
+    },
   };
 }
 
@@ -41,11 +45,12 @@ export function mergeSettings(base: Settings, patch: SettingsPatch): Settings {
     ollama: { ...base.ollama, ...patch.ollama },
     kb: { ...base.kb, ...patch.kb },
     generation: { ...base.generation, ...patch.generation },
+    capture: { ...base.capture, ...patch.capture },
   };
 }
 
 export function mergePatches(a: SettingsPatch, b: SettingsPatch): SettingsPatch {
-  return { ollama: { ...a.ollama, ...b.ollama }, kb: { ...a.kb, ...b.kb }, generation: { ...a.generation, ...b.generation } };
+  return { ollama: { ...a.ollama, ...b.ollama }, kb: { ...a.kb, ...b.kb }, generation: { ...a.generation, ...b.generation }, capture: { ...a.capture, ...b.capture } };
 }
 
 export function getSettings(): Settings {
@@ -114,6 +119,18 @@ export function validatePatch(patch: SettingsPatch, strategies: string[]): Valid
       else errors['generation.fragmentsPerCluster'] = 'Enter a whole number from 1 to 6.';
     }
     value.generation = g;
+  }
+
+  if (patch.capture) {
+    const c: NonNullable<SettingsPatch['capture']> = {};
+    if (patch.capture.url !== undefined) {
+      const raw = String(patch.capture.url).trim().replace(/\/+$/, '');
+      let ok = raw === ''; // empty = disabled
+      if (!ok) { try { const u = new URL(raw); ok = u.protocol === 'http:' || u.protocol === 'https:'; } catch { /* invalid */ } }
+      if (ok) c.url = raw; else errors['capture.url'] = 'Enter a full http:// or https:// URL, or leave empty to disable.';
+    }
+    if (patch.capture.token !== undefined) c.token = String(patch.capture.token).trim();
+    value.capture = c;
   }
 
   return { value, errors };

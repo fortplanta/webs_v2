@@ -28,6 +28,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
   const [saved, setSaved] = useState(false);
   const [ollama, setOllama] = useState<OllamaStatus>({ state: 'checking' });
   const [modules, setModules] = useState<KbModuleInfo[]>([]);
+  const [captureTest, setCaptureTest] = useState<{ ok: boolean; message: string } | 'checking' | null>(null);
   const checkSeq = useRef(0);
 
   useEffect(() => {
@@ -75,6 +76,11 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
     if (!window.confirm('Reset all settings to their defaults?')) return;
     const b = await window.webs.resetSettings();
     setBundle(b); setDraft(b.settings); setModules(b.modules); setErrors({}); setSaved(true);
+  }
+
+  async function testCapture() {
+    setCaptureTest('checking');
+    setCaptureTest(await window.webs.testCapture(draft!.capture.url, draft!.capture.token));
   }
 
   async function browse() {
@@ -168,6 +174,25 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
             </div>
             {err('generation.clusterCount')}
             {err('generation.fragmentsPerCluster')}
+          </fieldset>
+
+          <fieldset>
+            <legend>Capture inbox</legend>
+            <label>
+              Capture service URL <span className="meta">leave empty to turn the inbox off</span>
+              <input value={draft.capture.url} onChange={e => { setCaptureTest(null); set('capture', 'url', e.target.value); }} placeholder="http://localhost:8787" spellCheck={false} />
+            </label>
+            {err('capture.url')}
+            <label>
+              Token
+              <input type="password" value={draft.capture.token} onChange={e => { setCaptureTest(null); set('capture', 'token', e.target.value); }} autoComplete="off" spellCheck={false} />
+            </label>
+            <div className={`hint ${captureTest && captureTest !== 'checking' && !captureTest.ok ? 'status-down' : ''}`} aria-live="polite">
+              {captureTest === 'checking' && 'Checking…'}
+              {captureTest && captureTest !== 'checking' && captureTest.message}
+              {' '}<button type="button" className="link" onClick={testCapture} disabled={!draft.capture.url}>Test connection</button>
+            </div>
+            <div className="hint">Your webs-capture service. Captures from the browser extension (see <code>extension/</code>) and your phone appear in the canvas Inbox.</div>
           </fieldset>
 
           <div className="actions">

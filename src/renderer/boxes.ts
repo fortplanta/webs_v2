@@ -40,6 +40,15 @@ export function clip(text: string, maxChars: number): string {
   return text.length > maxChars ? text.slice(0, maxChars - 1).trimEnd() + '…' : text;
 }
 
+/** "example.com" for a URL; the input unchanged if it isn't one. */
+export function hostLabel(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+}
+
+export function isHttpUrl(v: string): boolean {
+  try { const u = new URL(v); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; }
+}
+
 export function typeColors(type: FragmentType): { bg: string; text: string } {
   return {
     bg: cssVar(`--color-fragment-${type}-bg`, '#ffffff'),
@@ -53,7 +62,7 @@ export function fragmentLook(f: GeneratedFragment): { backgroundColor: string; l
   return {
     backgroundColor: bg,
     label: {
-      text: `${f.type.toUpperCase()}\n${f.title}\n\n${wrap(body, 36)}`,
+      text: `${f.type.toUpperCase()}\n${f.title}\n\n${wrap(body, 36)}${f.link ? `\n\n↗ ${hostLabel(f.link)}` : ''}`,
       fontSize: 12, strokeColor: text, fontFamily: 2, textAlign: 'left', verticalAlign: 'top',
     },
   };

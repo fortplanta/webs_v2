@@ -1,5 +1,6 @@
 import type { WebEvent } from '../backend/events';
 import type { WebModel } from './web';
+import type { CaptureTestResult, InboxResult } from './capture';
 import type { KbModuleInfo, OllamaModelsResult, SaveSettingsResult, SettingsBundle, SettingsPatch } from './settings';
 
 /** Excalidraw elements as stored; opaque to the backend. */
@@ -46,4 +47,12 @@ export interface WebsApi {
   listKbModules(dir: string): Promise<KbModuleInfo[]>;
   /** Native folder picker; resolves to null if cancelled. */
   pickKbFolder(): Promise<string | null>;
+
+  /** Pending captures from the webs-capture service (empty-handed if not configured/reachable). */
+  getInbox(): Promise<InboxResult>;
+  /** Mark a capture as placed on the canvas (nodeId = the card's element id). */
+  fileCapture(id: string, nodeId: string): Promise<{ ok: boolean; message?: string }>;
+  dismissCapture(id: string): Promise<{ ok: boolean; message?: string }>;
+  /** Test a service URL + token without saving them. */
+  testCapture(url: string, token: string): Promise<CaptureTestResult>;
 }

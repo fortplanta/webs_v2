@@ -26,6 +26,8 @@ function buildLabel(geometry: { x: number; y: number; width: number; height: num
 export interface BoxPatch {
   backgroundColor?: string;
   customData?: unknown;
+  /** undefined = leave; null = remove. Excalidraw shows a link badge that opens in the browser. */
+  link?: string | null;
   /** undefined = leave the label; null = remove it. */
   label?: LabelSpec | null;
   /** Where to lay the label out (defaults to the box itself). */
@@ -54,6 +56,7 @@ export function updateBox(elements: El[], id: string, patch: BoxPatch, build: Bu
   const nextBox = { ...box, boundElements: bound.length ? bound : null } as El;
   if (patch.backgroundColor !== undefined) nextBox.backgroundColor = patch.backgroundColor;
   if (patch.customData !== undefined) nextBox.customData = patch.customData;
+  if (patch.link !== undefined) nextBox.link = patch.link;
   out[idx] = bump(nextBox);
   return out;
 }
@@ -64,16 +67,17 @@ export interface NewBox {
   backgroundColor: string;
   customData: BoxData;
   label: LabelSpec;
+  link?: string;
 }
 
 export function addBox(elements: El[], box: NewBox, build: Build): El[] {
   const made = build([{
     type: 'rectangle', id: box.id, x: box.x, y: box.y, width: box.width, height: box.height,
     strokeColor: 'transparent', backgroundColor: box.backgroundColor, fillStyle: 'solid', roundness: null,
-    customData: box.customData, label: box.label,
+    customData: box.customData, label: box.label, ...(box.link ? { link: box.link } : {}),
   }]);
   const fixed = made.map(e => (e.type === 'text' && e.containerId === box.id ? { ...e, id: labelIdFor(box.id) } : e))
-    .map(e => (e.id === box.id ? { ...e, customData: box.customData, boundElements: (e.boundElements ?? []).map((b: El) => (b.type === 'text' ? { ...b, id: labelIdFor(box.id) } : b)) } : e));
+    .map(e => (e.id === box.id ? { ...e, customData: box.customData, ...(box.link ? { link: box.link } : {}), boundElements: (e.boundElements ?? []).map((b: El) => (b.type === 'text' ? { ...b, id: labelIdFor(box.id) } : b)) } : e));
   return [...elements, ...fixed];
 }
 

@@ -18,6 +18,8 @@ export interface GeneratedFragment {
   list?: string[];
   era?: string;
   historicalEra?: string;
+  /** Where this came from (http/https). Shown on the card and opens externally. */
+  link?: string;
 }
 
 export interface OverviewEdge {

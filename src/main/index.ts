@@ -1,9 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { runStrategy, strategies } from '../backend/strategies';
 import { listOllamaModels, warmUp } from '../backend/llm';
 import { listKbModules } from '../backend/kb';
+import { listInbox, markComposted, markFiled, testCapture } from '../backend/capture';
 import { defaultSettings, getSettings, getSettingsOverrides, mergePatches, setSettingsOverrides, validatePatch } from '../backend/settings';
 import type { SaveSettingsResult, SettingsBundle, SettingsPatch } from '../types/settings';
 import { WebStore } from '../backend/db';
@@ -71,6 +72,11 @@ ipcMain.handle('settings:pick-kb-folder', async () => {
   return r.canceled ? null : r.filePaths[0];
 });
 
+ipcMain.handle('capture:inbox', () => listInbox());
+ipcMain.handle('capture:file', (_e, id: string, nodeId: string) => markFiled(id, nodeId));
+ipcMain.handle('capture:dismiss', (_e, id: string) => markComposted(id));
+ipcMain.handle('capture:test', (_e, url: string, token: string) => testCapture(url, token));
+
 let lastWarm = 0;
 function warmOnce() {
   if (Date.now() - lastWarm < 5 * 60_000) return;
@@ -88,6 +94,15 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+  // Links on cards open in the user's browser; the app window never navigates away or spawns windows.
+  const openExternal = (url: string) => { if (/^https?:\/\//i.test(url)) void shell.openExternal(url); };
+  win.webContents.setWindowOpenHandler(({ url }) => { openExternal(url); return { action: 'deny' }; });
+  win.webContents.on('will-navigate', (e, url) => {
+    const dev = process.env.ELECTRON_RENDERER_URL;
+    if (dev && new URL(url).origin === new URL(dev).origin) return; // dev-server reloads
+    e.preventDefault();
+    openExternal(url);
   });
   if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL);
   else win.loadFile(path.join(__dirname, '../renderer/index.html'));

@@ -3,8 +3,10 @@ import { Excalidraw, viewportCoordsToSceneCoords } from '@excalidraw/excalidraw'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import '@excalidraw/excalidraw/index.css';
 import type { GeneratedFragment } from '../backend/events';
+import type { InboxItem } from '../types/capture';
 import { clusterLabel, edgeLabel, FRAG_H, FRAG_W, fragmentLook, GAP, HEADER_H } from './boxes';
-import { ClusterEditor, EdgeEditor, FragmentEditor } from './Editors';
+import { fragmentFromCapture, fragmentFromPaste, looksLikeExcalidrawClipboard } from './capture';
+import { ClusterEditor, EdgeEditor, FragmentEditor, InboxPanel } from './Editors';
 import { hitTest } from './hit';
 import { buildSkeletons } from './layout';
 import { convertWithStableIds, mergeScene } from './sceneMerge';
@@ -26,11 +28,20 @@ type Editing =
   | null;
 
 const SAVE_DEBOUNCE_MS = 800;
+const INBOX_POLL_MS = 30_000;
+
+interface InboxState { items: InboxItem[]; unsupported: number; error: string | null; busy: boolean }
+const emptyInbox: InboxState = { items: [], unsupported: 0, error: null, busy: false };
+
+const isEditable = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 const build = (skeletons: unknown[]) => convertWithStableIds(skeletons) as El[];
 
 export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
+  const [captureUrl, setCaptureUrl] = useState('');
+  const [inbox, setInbox] = useState<InboxState>(emptyInbox);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const applied = useRef(new Map<string, string>());
   const framed = useRef({ kb: false, overview: false });
   const lastHash = useRef<string | null>(null);
@@ -101,7 +112,7 @@ export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
     const el = byId(id);
     if (!el) return;
     const look = fragmentLook(fragment);
-    apply(updateBox(scene(), id, { backgroundColor: look.backgroundColor, customData: { ...el.customData, fragment }, label: look.label }, build));
+    apply(updateBox(scene(), id, { backgroundColor: look.backgroundColor, customData: { ...el.customData, fragment }, link: fragment.link ?? null, label: look.label }, build));
     setEditing({ kind: 'fragment', id, fragment });
   }
 
@@ -124,24 +135,35 @@ export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
     setEditing(null);
   }
 
-  function newFragment(at: { x: number; y: number }, cluster?: number) {
-    const fragment: GeneratedFragment = { type: 'concept', title: 'new fragment', body: 'Describe this fragment.', tags: [] };
+  /** Places a card and returns its id. `open` also selects it and opens the editor. */
+  function newFragment(at: { x: number; y: number }, cluster?: number, fragment: GeneratedFragment = { type: 'concept', title: 'new fragment', body: 'Describe this fragment.', tags: [] }, open = true): string {
     const look = fragmentLook(fragment);
     const id = `m-${crypto.randomUUID().slice(0, 8)}`;
     apply(addBox(scene(), {
       id, x: at.x, y: at.y, width: FRAG_W, height: FRAG_H,
-      backgroundColor: look.backgroundColor, label: look.label,
+      backgroundColor: look.backgroundColor, label: look.label, link: fragment.link,
       customData: { kind: 'fragment', ...(cluster !== undefined ? { cluster } : {}), fragment },
     }, build));
-    api!.updateScene({ appState: { selectedElementIds: { [id]: true } } as any });
-    setEditing({ kind: 'fragment', id, fragment });
+    if (open) {
+      api!.updateScene({ appState: { selectedElementIds: { [id]: true } } as any });
+      setEditing({ kind: 'fragment', id, fragment });
+    }
+    return id;
   }
 
+  const viewCenter = () => {
+    const app = api!.getAppState();
+    return viewportCoordsToSceneCoords({ clientX: app.offsetLeft + app.width / 2, clientY: app.offsetTop + app.height / 2 }, app);
+  };
+
+  /** Free spot near the middle of the view for a new card. */
+  const freeSpotInView = () => {
+    const c = viewCenter();
+    return findFreeSpot(scene(), { x: c.x - FRAG_W / 2, y: c.y - FRAG_H / 2 }, FRAG_W, FRAG_H);
+  };
+
   function addFreeFragment() {
-    if (!api) return;
-    const app = api.getAppState();
-    const c = viewportCoordsToSceneCoords({ clientX: app.offsetLeft + app.width / 2, clientY: app.offsetTop + app.height / 2 }, app);
-    newFragment(findFreeSpot(scene(), { x: c.x - FRAG_W / 2, y: c.y - FRAG_H / 2 }, FRAG_W, FRAG_H));
+    if (api) newFragment(freeSpotInView());
   }
 
   function addToCluster(id: string) {
@@ -151,6 +173,63 @@ export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
     const column = scene().filter(e => !e.isDeleted && e.type === 'rectangle' && Math.abs(e.x - header.x) < 1 && e.y > header.y);
     const bottom = Math.max(header.y + HEADER_H, ...column.map(e => e.y + e.height));
     newFragment({ x: header.x, y: bottom + GAP }, header.customData.index);
+  }
+
+  // ── Paste & capture inbox ─────────────────────────────────────────────────
+
+  // Text/URL pasted onto the canvas becomes a card. Capture phase on `document` runs before
+  // Excalidraw's own paste handler; images, Excalidraw's own clipboard and text fields are left alone.
+  useEffect(() => {
+    if (!api) return;
+    const onPaste = (e: ClipboardEvent) => {
+      if (isEditable(e.target)) return;
+      const data = e.clipboardData;
+      if (!data || data.files.length > 0) return;
+      const text = data.getData('text/plain');
+      if (looksLikeExcalidrawClipboard(text)) return;
+      const fragment = fragmentFromPaste(text);
+      if (!fragment) return;
+      e.preventDefault();
+      e.stopPropagation();
+      newFragment(freeSpotInView(), undefined, fragment);
+    };
+    document.addEventListener('paste', onPaste, true);
+    return () => document.removeEventListener('paste', onPaste, true);
+  });
+
+  useEffect(() => {
+    window.webs.getSettings().then(b => setCaptureUrl(b.settings.capture.url)).catch(() => {});
+  }, []);
+
+  async function refreshInbox() {
+    setInbox(i => ({ ...i, busy: true }));
+    const r = await window.webs.getInbox();
+    setInbox(r.ok ? { items: r.items, unsupported: r.unsupported, error: null, busy: false } : { ...emptyInbox, error: r.message });
+  }
+
+  useEffect(() => {
+    if (!captureUrl) return;
+    void refreshInbox();
+    const t = setInterval(() => { void refreshInbox(); }, INBOX_POLL_MS);
+    return () => clearInterval(t);
+  }, [captureUrl]);
+
+  async function addCapture(item: InboxItem) {
+    if (!api) return;
+    const id = newFragment(freeSpotInView(), undefined, fragmentFromCapture(item), false);
+    setInbox(i => ({ ...i, items: i.items.filter(x => x.id !== item.id) }));
+    const r = await window.webs.fileCapture(item.id, id);
+    if (!r.ok) setInbox(i => ({ ...i, error: `Placed on the canvas, but couldn't mark it filed (${r.message}). It may reappear here.` }));
+  }
+
+  async function addAllCaptures() {
+    for (const item of [...inbox.items]) await addCapture(item);
+  }
+
+  async function dismissCapture(item: InboxItem) {
+    setInbox(i => ({ ...i, items: i.items.filter(x => x.id !== item.id) }));
+    const r = await window.webs.dismissCapture(item.id);
+    if (!r.ok) setInbox(i => ({ ...i, error: `Couldn't dismiss it (${r.message}).` }));
   }
 
   return (
@@ -168,8 +247,16 @@ export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
 
       <div className="canvas-tools">
         <button onClick={addFreeFragment} disabled={!api}>＋ Fragment</button>
-        <span className="hint">Double-click a card or connection to edit · draw connections with the arrow tool</span>
+        {captureUrl && <button className="secondary" onClick={() => { setInboxOpen(o => !o); void refreshInbox(); }} aria-pressed={inboxOpen}>Inbox{inbox.items.length > 0 ? ` (${inbox.items.length})` : ''}</button>}
+        <span className="hint">Double-click a card or connection to edit · paste text or a link to add a card</span>
       </div>
+
+      {inboxOpen && captureUrl && (
+        <InboxPanel
+          items={inbox.items} unsupported={inbox.unsupported} error={inbox.error} busy={inbox.busy} serviceUrl={captureUrl}
+          onAdd={addCapture} onAddAll={addAllCaptures} onDismiss={dismissCapture} onRefresh={refreshInbox} onClose={() => setInboxOpen(false)}
+        />
+      )}
 
       {editing?.kind === 'fragment' && (
         <FragmentEditor key={editing.id} fragment={editing.fragment} onChange={f => editFragment(editing.id, f)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} />

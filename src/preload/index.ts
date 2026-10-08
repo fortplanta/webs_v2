@@ -30,6 +30,10 @@ const api: WebsApi = {
   listOllamaModels: baseUrl => ipcRenderer.invoke('settings:ollama-models', baseUrl),
   listKbModules: dir => ipcRenderer.invoke('settings:kb-modules', dir),
   pickKbFolder: () => ipcRenderer.invoke('settings:pick-kb-folder'),
+  getInbox: () => ipcRenderer.invoke('capture:inbox'),
+  fileCapture: (id, nodeId) => ipcRenderer.invoke('capture:file', id, nodeId),
+  dismissCapture: id => ipcRenderer.invoke('capture:dismiss', id),
+  testCapture: (url, token) => ipcRenderer.invoke('capture:test', url, token),
 };
 
 contextBridge.exposeInMainWorld('webs', api);
