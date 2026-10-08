@@ -36,6 +36,9 @@ ipcMain.handle('webs:list', () => store.list());
 ipcMain.handle('webs:load', (_e, id: string) => store.get(id));
 ipcMain.handle('webs:save', (_e, input) => store.save(input));
 ipcMain.handle('webs:delete', (_e, id: string) => store.delete(id));
+ipcMain.handle('webs:save-file', (_e, webId: string, file) => {
+  try { store.saveFile(webId, file); return { ok: true }; } catch (err) { return { ok: false, message: (err as Error).message }; }
+});
 
 const SETTINGS_KEY = 'settings';
 

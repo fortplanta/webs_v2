@@ -1,6 +1,6 @@
 import type { El } from './sceneEdit';
 
-export type Hit = { id: string; kind: 'fragment' | 'cluster' | 'edge' };
+export type Hit = { id: string; kind: 'fragment' | 'cluster' | 'image' | 'edge' };
 
 function distToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
   const dx = bx - ax, dy = by - ay;
@@ -9,7 +9,17 @@ function distToSegment(px: number, py: number, ax: number, ay: number, bx: numbe
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-const inside = (e: El, x: number, y: number) => x >= e.x && x <= e.x + e.width && y >= e.y && y <= e.y + e.height;
+/** Point-in-box, honouring the element's rotation (about its own center). */
+function inside(e: El, x: number, y: number): boolean {
+  let px = x, py = y;
+  if (e.angle) {
+    const cx = e.x + e.width / 2, cy = e.y + e.height / 2;
+    const c = Math.cos(-e.angle), s = Math.sin(-e.angle);
+    px = cx + (x - cx) * c - (y - cy) * s;
+    py = cy + (x - cx) * s + (y - cy) * c;
+  }
+  return px >= e.x && px <= e.x + e.width && py >= e.y && py <= e.y + e.height;
+}
 
 /** What editable thing (if any) is at scene point (x, y)? Arrows win over boxes; later elements win over earlier. */
 export function hitTest(elements: readonly El[], x: number, y: number, zoom: number): Hit | null {
@@ -30,8 +40,9 @@ export function hitTest(elements: readonly El[], x: number, y: number, zoom: num
   }
   for (let i = elements.length - 1; i >= 0; i--) {
     const e = elements[i];
-    const kind = e.customData?.kind;
-    if (e.isDeleted || e.type !== 'rectangle' || (kind !== 'fragment' && kind !== 'cluster')) continue;
+    const k = e.customData?.kind;
+    const kind = k === 'image-card' ? 'image' : k;
+    if (e.isDeleted || e.type !== 'rectangle' || (kind !== 'fragment' && kind !== 'cluster' && kind !== 'image')) continue;
     if (inside(e, x, y)) return { id: e.id, kind };
   }
   return null;

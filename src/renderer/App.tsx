@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { SavedWebSummary } from '../types/ipc';
+import type { SavedFile, SavedWebSummary } from '../types/ipc';
 import { CanvasView } from './CanvasView';
 import { SettingsView } from './SettingsView';
 import { hydrateScene } from './sceneEdit';
@@ -21,6 +21,7 @@ export function App() {
   const [model, setModel] = useState<WebModel | null>(null);
   const [webId, setWebId] = useState<string | null>(null);
   const [restoredScene, setRestoredScene] = useState<unknown[] | undefined>(undefined);
+  const [restoredFiles, setRestoredFiles] = useState<SavedFile[]>([]);
   const [library, setLibrary] = useState<SavedWebSummary[]>([]);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -58,6 +59,7 @@ export function App() {
     idRef.current = id;
     setWebId(id);
     setRestoredScene(undefined);
+    setRestoredFiles([]);
     setError(null);
     setCurrent(initialModel(q));
     cancel.current = window.webs.generate(q, ev => {
@@ -80,6 +82,7 @@ export function App() {
     idRef.current = id;
     setWebId(id);
     setRestoredScene(hydrateScene(saved.scene as any[], saved.model));
+    setRestoredFiles(saved.files);
     setCurrent(saved.model);
   }
 
@@ -131,7 +134,7 @@ export function App() {
             </>
           )}
         </div>
-        <CanvasView key={webId} model={model} restoredScene={restoredScene} onSceneChange={onSceneChange} />
+        <CanvasView key={webId} webId={webId} model={model} restoredScene={restoredScene} restoredFiles={restoredFiles} onSceneChange={onSceneChange} />
       </div>
     );
   }

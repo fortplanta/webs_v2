@@ -75,3 +75,7 @@ export function clusterLabel(title: string): LabelSpec {
 export function edgeLabel(text: string): LabelSpec {
   return { text, fontSize: 14, strokeColor: '#1a1a1a', fontFamily: 2 };
 }
+
+export function captionLabel(text: string): LabelSpec {
+  return { text, fontSize: 12, strokeColor: cssVar('--color-image-card-caption', '#525252'), fontFamily: 2, textAlign: 'center', verticalAlign: 'bottom' };
+}

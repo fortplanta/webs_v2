@@ -1,22 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
-import { Excalidraw, viewportCoordsToSceneCoords } from '@excalidraw/excalidraw';
-import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
+import { Excalidraw, restoreElements, viewportCoordsToSceneCoords } from '@excalidraw/excalidraw';
+import type { BinaryFileData, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import '@excalidraw/excalidraw/index.css';
 import type { GeneratedFragment } from '../backend/events';
 import type { InboxItem } from '../types/capture';
-import { clusterLabel, edgeLabel, FRAG_H, FRAG_W, fragmentLook, GAP, HEADER_H } from './boxes';
+import type { SavedFile } from '../types/ipc';
+import { captionLabel, clusterLabel, edgeLabel, FRAG_H, FRAG_W, fragmentLook, GAP, HEADER_H } from './boxes';
 import { fragmentFromCapture, fragmentFromPaste, looksLikeExcalidrawClipboard } from './capture';
-import { ClusterEditor, EdgeEditor, FragmentEditor, InboxPanel } from './Editors';
+import { ClusterEditor, EdgeEditor, FragmentEditor, ImageCardEditor, InboxPanel } from './Editors';
 import { hitTest } from './hit';
+import { addImageCard, imageCardLayout, type ImageCardData } from './imageCard';
+import { revealView } from './viewport';
+import { blobToDataURL, contentId, describeResize, ImageImportError, imageTypeOf, looksLikeImage, prepareImage } from './images';
 import { buildSkeletons } from './layout';
 import { convertWithStableIds, mergeScene } from './sceneMerge';
 import { addBox, arrowCenterBox, findFreeSpot, removeBox, updateBox, type El } from './sceneEdit';
 import type { WebModel } from './webModel';
 
 interface Props {
+  /** Identifies the web, so image data can be stored against it. */
+  webId: string;
   model: WebModel;
   /** A saved scene to show exactly as stored. When set, the canvas is not rebuilt from `model`. */
   restoredScene?: unknown[];
+  /** Image pixel data saved with the web. */
+  restoredFiles?: SavedFile[];
   /** Called (debounced) when the user's scene actually changes. */
   onSceneChange?: (elements: unknown[]) => void;
 }
@@ -25,6 +33,7 @@ type Editing =
   | { kind: 'fragment'; id: string; fragment: GeneratedFragment }
   | { kind: 'cluster'; id: string; title: string }
   | { kind: 'edge'; id: string; label: string }
+  | { kind: 'image'; id: string; data: ImageCardData }
   | null;
 
 const SAVE_DEBOUNCE_MS = 800;
@@ -36,12 +45,16 @@ const emptyInbox: InboxState = { items: [], unsupported: 0, error: null, busy: f
 const isEditable = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 const build = (skeletons: unknown[]) => convertWithStableIds(skeletons) as El[];
 
-export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
+export function CanvasView({ webId, model, restoredScene, restoredFiles, onSceneChange }: Props) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
   const [captureUrl, setCaptureUrl] = useState('');
   const [inbox, setInbox] = useState<InboxState>(emptyInbox);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout>>();
+  const fileInput = useRef<HTMLInputElement>(null);
+  const savedFiles = useRef(new Set<string>((restoredFiles ?? []).map(f => f.id)));
   const applied = useRef(new Map<string, string>());
   const framed = useRef({ kb: false, overview: false });
   const lastHash = useRef<string | null>(null);
@@ -77,9 +90,26 @@ export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
     if (api && restored) frame(restoredScene as El[], false);
   }, [api, restored]);
 
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => () => { clearTimeout(timer.current); clearTimeout(noticeTimer.current); }, []);
 
-  function handleChange(elements: readonly { id: string; version: number }[]) {
+  function say(kind: 'info' | 'error', text: string) {
+    clearTimeout(noticeTimer.current);
+    setNotice({ kind, text });
+    noticeTimer.current = setTimeout(() => setNotice(null), kind === 'error' ? 12_000 : 7_000);
+  }
+
+  function handleChange(elements: readonly { id: string; version: number; type?: string; fileId?: string; isDeleted?: boolean }[], _app: unknown, files: Record<string, BinaryFileData>) {
+    // Persist each image's pixels once, the first time an image element referencing it is on the scene.
+    for (const el of elements) {
+      if (el.type !== 'image' || el.isDeleted || !el.fileId || savedFiles.current.has(el.fileId)) continue;
+      const f = files[el.fileId];
+      if (!f) continue;
+      savedFiles.current.add(el.fileId);
+      void window.webs.saveFile(webId, { id: f.id, mimeType: f.mimeType, dataURL: f.dataURL, created: f.created }).then(r => {
+        if (!r.ok) { savedFiles.current.delete(el.fileId!); say('error', `Couldn't save an image with this web (${r.message}). It will be missing after you reopen it.`); }
+      });
+    }
+
     if (!onSceneChange || elements.length === 0) return;
     // Pan/zoom/selection also fire onChange; only persist when an element actually changed.
     const hash = elements.map(e => `${e.id}:${e.version}`).join(',');
@@ -96,13 +126,29 @@ export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
   const apply = (next: El[]) => api!.updateScene({ elements: next as any });
   const byId = (id: string) => scene().find(e => e.id === id && !e.isDeleted);
 
-  function openEditor(hit: { id: string; kind: 'fragment' | 'cluster' | 'edge' }) {
+  function openEditor(hit: { id: string; kind: 'fragment' | 'cluster' | 'image' | 'edge' }) {
     const el = byId(hit.id);
     if (!el) return;
     api!.updateScene({ appState: { selectedElementIds: { [hit.id]: true } } as any });
     if (hit.kind === 'fragment') setEditing({ kind: 'fragment', id: hit.id, fragment: el.customData.fragment });
     else if (hit.kind === 'cluster') setEditing({ kind: 'cluster', id: hit.id, title: el.customData.title });
+    else if (hit.kind === 'image') setEditing({ kind: 'image', id: hit.id, data: el.customData });
     else setEditing({ kind: 'edge', id: hit.id, label: scene().find(e => e.type === 'text' && e.containerId === hit.id && !e.isDeleted)?.text ?? '' });
+  }
+
+  // Dropping image files onto the canvas. Other file types are left to the browser/Excalidraw.
+  const dragHasFiles = (e: React.DragEvent) => [...e.dataTransfer.types].includes('Files');
+  function onDragOverCapture(e: React.DragEvent) {
+    if (dragHasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
+  }
+  function onDropCapture(e: React.DragEvent) {
+    if (!api) return;
+    const dropped = [...e.dataTransfer.files].filter(looksLikeImage);
+    if (dropped.length === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const p = viewportCoordsToSceneCoords({ clientX: e.clientX, clientY: e.clientY }, api.getAppState());
+    void importImages(dropped, { x: p.x, y: p.y });
   }
 
   function onDoubleClickCapture(e: React.MouseEvent) {
@@ -136,6 +182,59 @@ export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
     if (!el) return;
     apply(updateBox(scene(), id, label.trim() ? { label: edgeLabel(label), geometry: arrowCenterBox(el) } : { label: null }, build));
     setEditing({ kind: 'edge', id, label });
+  }
+
+  function editImage(id: string, caption: string) {
+    const el = byId(id);
+    if (!el) return;
+    const data = { ...el.customData, caption } as ImageCardData;
+    apply(updateBox(scene(), id, { customData: data, label: caption.trim() ? captionLabel(caption) : null }, build));
+    setEditing({ kind: 'image', id, data });
+  }
+
+  /** Every way an image arrives (button, paste, drop) comes through here. */
+  async function importImages(files: File[], at?: { x: number; y: number }) {
+    if (!api) return;
+    const images = files.filter(looksLikeImage);
+    const problems: string[] = [], notes: string[] = [];
+    const placed: Array<{ x: number; y: number; width: number; height: number }> = [];
+    let last: string | null = null;
+    for (const file of images) {
+      try {
+        const p = await prepareImage(file);
+        const fileId = await contentId(p.blob);
+        const dataURL = await blobToDataURL(p.blob);
+        api.addFiles([{ id: fileId as BinaryFileData['id'], mimeType: p.mimeType as BinaryFileData['mimeType'], dataURL: dataURL as BinaryFileData['dataURL'], created: Date.now() }]);
+
+        const lay = imageCardLayout(p.width, p.height);
+        const prev = placed.at(-1);
+        // The first image goes where asked (default: middle of the view); the rest follow in a row.
+        const spot = prev ? { x: prev.x + prev.width + GAP, y: prev.y } : at ?? (() => { const c = viewCenter(); return { x: c.x - lay.width / 2, y: c.y - lay.height / 2 }; })();
+        const pos = findFreeSpot(scene(), spot, lay.width, lay.height);
+        const id = `m-${crypto.randomUUID().slice(0, 8)}`;
+        const added = addImageCard(scene(), {
+          id, x: pos.x, y: pos.y,
+          data: { fileId, caption: '', name: p.name, width: p.width, height: p.height, ...(p.resizedFrom ? { resizedFrom: p.resizedFrom } : {}) },
+        }, build, raw => restoreElements([raw as any], null)[0] as unknown as El);
+        apply(added.elements);
+        placed.push({ x: pos.x, y: pos.y, width: added.width, height: added.height });
+        last = added.cardId;
+        if (p.resizedFrom) notes.push(describeResize(p.name, p.resizedFrom, { bytes: p.blob.size, width: p.width, height: p.height }));
+      } catch (err) {
+        problems.push(`${file.name || 'image'}: ${err instanceof ImageImportError ? err.message : (err as Error).message}`);
+      }
+    }
+    if (last) api.updateScene({ appState: { selectedElementIds: { [last]: true, [`${last}-image`]: true }, selectedGroupIds: { [`grp-${last}`]: true } } as any });
+    if (placed.length) {
+      // bring what was just added into view
+      const x1 = Math.min(...placed.map(b => b.x)), y1 = Math.min(...placed.map(b => b.y));
+      const x2 = Math.max(...placed.map(b => b.x + b.width)), y2 = Math.max(...placed.map(b => b.y + b.height));
+      const a = api.getAppState();
+      const next = revealView({ scrollX: a.scrollX, scrollY: a.scrollY, zoom: a.zoom.value, width: a.width, height: a.height }, { x: x1, y: y1, width: x2 - x1, height: y2 - y1 });
+      if (next) api.updateScene({ appState: { scrollX: next.scrollX, scrollY: next.scrollY, zoom: { value: next.zoom } } as any });
+    }
+    if (problems.length) say('error', [...problems, ...notes].join('\n'));
+    else if (notes.length) say('info', notes.join('\n'));
   }
 
   function remove(id: string) {
@@ -192,7 +291,15 @@ export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
     const onPaste = (e: ClipboardEvent) => {
       if (isEditable(e.target)) return;
       const data = e.clipboardData;
-      if (!data || data.files.length > 0) return;
+      if (!data) return;
+      const pastedImages = [...data.files].filter(looksLikeImage);
+      if (pastedImages.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        void importImages(pastedImages);
+        return;
+      }
+      if (data.files.length > 0) return;
       const text = data.getData('text/plain');
       if (looksLikeExcalidrawClipboard(text)) return;
       const fragment = fragmentFromPaste(text);
@@ -242,11 +349,13 @@ export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
 
   return (
     <div className="canvas">
-      <div className="canvas-inner" onDoubleClickCapture={onDoubleClickCapture}>
+      <div className="canvas-inner" onDoubleClickCapture={onDoubleClickCapture} onDragOverCapture={onDragOverCapture} onDropCapture={onDropCapture}>
         <Excalidraw
           excalidrawAPI={setApi}
           onChange={handleChange as any}
+          UIOptions={{ tools: { image: false } }}
           initialData={{
+            files: Object.fromEntries((restoredFiles ?? []).map(f => [f.id, f])) as any,
             elements: restored ? (restoredScene as any) : undefined,
             appState: { viewBackgroundColor: '#f8f8f8' },
           }}
@@ -255,8 +364,10 @@ export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
 
       <div className="canvas-tools">
         <button onClick={addFreeFragment} disabled={!api}>＋ Fragment</button>
+        <button className="secondary" onClick={() => fileInput.current?.click()} disabled={!api}>＋ Image</button>
+        <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={e => { const f = [...(e.target.files ?? [])]; e.target.value = ''; void importImages(f); }} />
         {captureUrl && <button className="secondary" onClick={() => { setInboxOpen(o => !o); void refreshInbox(); }} aria-pressed={inboxOpen}>Inbox{inbox.items.length > 0 ? ` (${inbox.items.length})` : ''}</button>}
-        <span className="hint">Double-click a card or connection to edit · paste text or a link to add a card</span>
+        <span className="hint">Double-click a card or connection to edit · paste or drop text, links and images</span>
       </div>
 
       {inboxOpen && captureUrl && (
@@ -266,6 +377,11 @@ export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
         />
       )}
 
+      {notice && <div className={`canvas-notice ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
+
+      {editing?.kind === 'image' && (
+        <ImageCardEditor key={editing.id} data={editing.data} onCaption={c => editImage(editing.id, c)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} />
+      )}
       {editing?.kind === 'fragment' && (
         <FragmentEditor key={editing.id} fragment={editing.fragment} onChange={f => editFragment(editing.id, f)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} />
       )}

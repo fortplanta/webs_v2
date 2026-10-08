@@ -6,6 +6,14 @@ import type { KbModuleInfo, OllamaModelsResult, SaveSettingsResult, SettingsBund
 /** Excalidraw elements as stored; opaque to the backend. */
 export type SceneElements = unknown[];
 
+/** An image's pixel data (Excalidraw's BinaryFileData), stored apart from the scene JSON. */
+export interface SavedFile {
+  id: string;
+  mimeType: string;
+  dataURL: string;
+  created: number;
+}
+
 export interface SavedWebSummary {
   id: string;
   query: string;
@@ -18,6 +26,7 @@ export interface SavedWeb {
   query: string;
   model: WebModel;
   scene: SceneElements;
+  files: SavedFile[];
 }
 
 /** Partial update: omit a field to leave it as stored. */
@@ -37,6 +46,8 @@ export interface WebsApi {
   loadWeb(id: string): Promise<SavedWeb | null>;
   saveWeb(input: SaveWebInput): Promise<void>;
   deleteWeb(id: string): Promise<void>;
+  /** Persist one image's pixels for a web. Idempotent per file id. */
+  saveFile(webId: string, file: SavedFile): Promise<{ ok: boolean; message?: string }>;
 
   getSettings(): Promise<SettingsBundle>;
   /** Validates and persists the changed fields; applies to the next generation. */

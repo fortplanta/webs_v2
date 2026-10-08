@@ -3,7 +3,7 @@
 // app always loads/saves a web as a whole. Schema changes go in MIGRATIONS (order matters).
 
 import { DatabaseSync } from 'node:sqlite';
-import type { SavedWeb, SavedWebSummary, SaveWebInput } from '../types/ipc';
+import type { SavedFile, SavedWeb, SavedWebSummary, SaveWebInput } from '../types/ipc';
 import type { WebModel } from '../types/web';
 
 const MIGRATIONS: string[] = [
@@ -21,7 +21,21 @@ const MIGRATIONS: string[] = [
   // (customData), manual edits change the count, so the scene becomes its source.
   `ALTER TABLE webs ADD COLUMN fragment_count INTEGER;
    ALTER TABLE webs ADD COLUMN count_from_scene INTEGER NOT NULL DEFAULT 0;`,
+  // Image pixels live beside the scene, keyed by Excalidraw's content-hash file id. No FK to webs: a
+  // file can arrive a moment before the first model save has created the row; deleteWeb removes them.
+  `CREATE TABLE web_files (
+     web_id  TEXT NOT NULL,
+     id      TEXT NOT NULL,
+     mime    TEXT NOT NULL,
+     data    BLOB NOT NULL,
+     created INTEGER NOT NULL,
+     PRIMARY KEY (web_id, id)
+   );`,
 ];
+
+const FILE_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml', 'image/bmp', 'image/avif', 'image/x-icon', 'image/vnd.microsoft.icon']);
+const MAX_FILE_BYTES = 16 * 1024 * 1024; // sanity bound; the renderer keeps images far below this
+const DATA_URL = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/;
 
 function countModelFragments(model: WebModel): number {
   return model.clusters.reduce((n, c) => n + c.slots.filter(Boolean).length, 0);
@@ -105,11 +119,29 @@ export class WebStore {
     if (!r) return null;
     const model = JSON.parse(r.model) as WebModel | null;
     if (!model) return null;
-    return { id: r.id, query: r.query, model, scene: JSON.parse(r.scene) };
+    return { id: r.id, query: r.query, model, scene: JSON.parse(r.scene), files: this.files(id) };
+  }
+
+  saveFile(webId: string, file: SavedFile): void {
+    const m = DATA_URL.exec(file.dataURL);
+    if (!m) throw new Error('Image data must be a base64 data URL.');
+    if (!FILE_MIMES.has(m[1])) throw new Error(`Unsupported image type ${m[1]}.`);
+    const bytes = Buffer.from(m[2], 'base64');
+    if (bytes.length > MAX_FILE_BYTES) throw new Error('Image is too large to store.');
+    this.db.prepare(
+      `INSERT INTO web_files (web_id, id, mime, data, created) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(web_id, id) DO NOTHING`,
+    ).run(webId, file.id, m[1], bytes, file.created);
+  }
+
+  files(webId: string): SavedFile[] {
+    const rows = this.db.prepare('SELECT id, mime, data, created FROM web_files WHERE web_id = ?').all(webId) as Array<{ id: string; mime: string; data: Uint8Array; created: number }>;
+    return rows.map(r => ({ id: r.id, mimeType: r.mime, created: r.created, dataURL: `data:${r.mime};base64,${Buffer.from(r.data).toString('base64')}` }));
   }
 
   delete(id: string): void {
     this.db.prepare('DELETE FROM webs WHERE id = ?').run(id);
+    this.db.prepare('DELETE FROM web_files WHERE web_id = ?').run(id);
   }
 
   getSetting<T>(key: string): T | null {

@@ -3,6 +3,8 @@ import type { GeneratedFragment } from '../backend/events';
 import type { FragmentType } from '../types/fragments';
 import type { InboxItem } from '../types/capture';
 import { FRAGMENT_TYPES, hostLabel, isHttpUrl } from './boxes';
+import { formatBytes } from './images';
+import type { ImageCardData } from './imageCard';
 
 interface Shell { title: string; onClose: () => void; children: React.ReactNode }
 
@@ -175,5 +177,31 @@ export function InboxPanel({ items, unsupported, error, busy, serviceUrl, onAdd,
         </div>
       )}
     </aside>
+  );
+}
+
+export function ImageCardEditor({ data, onCaption, onDelete, onClose }: {
+  data: ImageCardData;
+  onCaption: (caption: string) => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [caption, setCaption] = useState(data.caption);
+  useEffect(() => { ref.current?.focus(); }, []);
+  return (
+    <Panel title="Edit image" onClose={onClose}>
+      <label>Caption <span className="meta">optional</span>
+        <input ref={ref} value={caption} onChange={e => { setCaption(e.target.value); onCaption(e.target.value); }} onKeyDown={e => { if (e.key === 'Enter') onClose(); }} />
+      </label>
+      <div className="hint">
+        {data.name} · {data.width}×{data.height}
+        {data.resizedFrom && <> · shrunk from {data.resizedFrom.width}×{data.resizedFrom.height} ({formatBytes(data.resizedFrom.bytes)}); your original file is untouched</>}
+      </div>
+      <div className="editor-actions">
+        <button className="danger" onClick={onDelete}>Delete image</button>
+        <button onClick={onClose}>Done</button>
+      </div>
+    </Panel>
   );
 }

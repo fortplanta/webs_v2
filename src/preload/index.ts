@@ -24,6 +24,7 @@ const api: WebsApi = {
   loadWeb: id => ipcRenderer.invoke('webs:load', id),
   saveWeb: input => ipcRenderer.invoke('webs:save', input),
   deleteWeb: id => ipcRenderer.invoke('webs:delete', id),
+  saveFile: (webId, file) => ipcRenderer.invoke('webs:save-file', webId, file),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: patch => ipcRenderer.invoke('settings:save', patch),
   resetSettings: () => ipcRenderer.invoke('settings:reset'),

@@ -63,6 +63,11 @@
   --color-fragment-quote-bg:     #2563EB;
   --color-fragment-quote-text:   #ffffff;
 
+  /* ─── Image card (component: customData.kind === 'image-card') ── */
+  --color-image-card-bg:       #ffffff;
+  --color-image-card-border:   #cfcfcf;
+  --color-image-card-caption:  #525252;
+
   /* ─── Seed fragment ───────────────────────────────────────── */
   --color-seed-bg:               #D2F34C;
   --color-seed-text:             #0a0a0a;

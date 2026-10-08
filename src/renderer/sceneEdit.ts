@@ -48,7 +48,7 @@ export function updateBox(elements: El[], id: string, patch: BoxPatch, build: Bu
     bound = bound.filter(b => b.id !== old.id);
   } else if (patch.label) {
     const newId = old?.id ?? labelIdFor(id);
-    const next = { ...buildLabel(patch.geometry ?? box as any, patch.label, build, newId, old), containerId: id };
+    const next = { ...buildLabel(patch.geometry ?? box as any, patch.label, build, newId, old), containerId: id, groupIds: box.groupIds ?? [] };
     if (old) out[out.indexOf(old)] = next; else out.push(next);
     if (!bound.some(b => b.id === newId)) bound.push({ type: 'text', id: newId });
   }
@@ -83,7 +83,8 @@ export function addBox(elements: El[], box: NewBox, build: Build): El[] {
 
 /** Soft-delete a box/arrow with its label, and clear anything that pointed at it. */
 export function removeBox(elements: El[], id: string): El[] {
-  const gone = new Set([id, ...elements.filter(e => e.type === 'text' && e.containerId === id).map(e => e.id)]);
+  // The box, its label, and anything that declares itself part of it (e.g. an image inside a card).
+  const gone = new Set([id, ...elements.filter(e => (e.type === 'text' && e.containerId === id) || e.customData?.card === id).map(e => e.id)]);
   return elements.map(e => {
     if (gone.has(e.id)) return bump({ ...e, isDeleted: true });
     let next = e;
