@@ -97,6 +97,10 @@ export function removeBox(elements: El[], id: string): El[] {
 /** Box a label should be centered in for a straight arrow. */
 export function arrowCenterBox(arrow: El): { x: number; y: number; width: number; height: number } {
   const pts: number[][] = arrow.points ?? [[0, 0]];
+  if (pts.length === 3) { // an arc: center the label on its peak
+    const [px, py] = [arrow.x + pts[1][0], arrow.y + pts[1][1]];
+    return { x: px - 40, y: py - 10, width: 80, height: 20 };
+  }
   const xs = pts.map(p => arrow.x + p[0]), ys = pts.map(p => arrow.y + p[1]);
   const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
   const width = Math.max(Math.max(...xs) - Math.min(...xs), 40), height = Math.max(Math.max(...ys) - Math.min(...ys), 20);

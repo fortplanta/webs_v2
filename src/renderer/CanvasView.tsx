@@ -59,14 +59,22 @@ export function CanvasView({ model, restoredScene, onSceneChange }: Props) {
     const stage = model.clusters.length > 0 ? 'overview' : 'kb';
     if (!framed.current[stage]) {
       framed.current[stage] = true;
-      requestAnimationFrame(() => api.scrollToContent(undefined, { fitToViewport: true, viewportZoomFactor: 0.9, animate: true }));
+      frame(elements as El[], true);
     }
   }, [api, model, restored]);
 
+  // Fit the viewport to exactly these elements. Passing them explicitly (rather than letting Excalidraw
+  // read its scene back) avoids framing a scene that hasn't absorbed our last update yet, which
+  // produced absurd zoom levels.
+  function frame(elements: El[], animate: boolean) {
+    const target = elements.filter(e => !e.isDeleted);
+    if (!api || target.length === 0) return;
+    requestAnimationFrame(() => api.scrollToContent(target as any, { fitToViewport: true, viewportZoomFactor: 0.9, animate }));
+  }
+
   // A reopened web is shown as stored; just fit it to the viewport once.
   useEffect(() => {
-    if (!api || !restored) return;
-    requestAnimationFrame(() => api.scrollToContent(undefined, { fitToViewport: true, viewportZoomFactor: 0.9 }));
+    if (api && restored) frame(restoredScene as El[], false);
   }, [api, restored]);
 
   useEffect(() => () => clearTimeout(timer.current), []);

@@ -10,6 +10,7 @@ import type { WebModel } from './webModel';
 
 export { FRAG_H, FRAG_W };
 const SEED_H = 120;
+const ARC_ROOM = 150; // space above the header row for arrows between non-adjacent clusters
 const COL_GAP = 120;
 const KB_H = 110;
 
@@ -19,7 +20,7 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
   const out: Skeleton[] = [];
   const colCount = Math.max(m.clusters.length, 2);
   const totalW = colCount * FRAG_W + (colCount - 1) * COL_GAP;
-  const clustersTop = SEED_H + GAP * 3;
+  const clustersTop = SEED_H + 30 + ARC_ROOM;
 
   // Seed
   const seedBg = cssVar('--color-seed-bg', '#D2F34C');

@@ -3,7 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('@excalidraw/excalidraw', () => ({ convertToExcalidrawElements: (x: unknown) => x }));
 
 import { initialModel, reduce, progress } from '../src/renderer/webModel';
-import { mergeScene, signature } from '../src/renderer/sceneMerge';
+import { mergeScene, routeArrows, signature } from '../src/renderer/sceneMerge';
+import { arrowCenterBox } from '../src/renderer/sceneEdit';
 
 describe('webModel reducer', () => {
   it('builds ghost slots from overview, fills them from fragment events, tracks progress', () => {
@@ -42,5 +43,40 @@ describe('mergeScene', () => {
   it('preserves user-drawn elements', () => {
     const mine = { id: 'abc', type: 'ellipse', x: 1, y: 1 };
     expect(mergeScene([mine], [], new Map()).elements).toContain(mine);
+  });
+});
+
+describe('routeArrows', () => {
+  const head = (i: number) => ({ id: `cluster-${i}`, type: 'rectangle', x: i * 400, y: 300, width: 280, height: 48, customData: { kind: 'cluster', index: i } });
+  const arrow = (id: string, from: number, to: number) => ({ id, type: 'arrow', x: 0, y: 0, startBinding: { elementId: `cluster-${from}` }, endBinding: { elementId: `cluster-${to}` } });
+  const els = [0, 1, 2, 3].map(head);
+  const find = (out: any[], id: string) => out.find(e => e.id === id);
+
+  it('draws adjacent clusters as a straight arrow between the facing edges', () => {
+    const a = find(routeArrows([...els, arrow('e', 0, 1)]), 'e');
+    expect(a.points).toHaveLength(2);
+    expect(a.x).toBe(280); // right edge of cluster 0
+    expect(a.x + a.points[1][0]).toBe(400); // left edge of cluster 1
+  });
+
+  it('arcs non-adjacent clusters over the header row, never through the clusters between them', () => {
+    const a = find(routeArrows([...els, arrow('e', 0, 2)]), 'e');
+    expect(a.points).toHaveLength(3);
+    expect(a.y).toBe(300); // leaves the top of cluster 0
+    expect(a.points[1][1]).toBeLessThan(-50); // peak is well above the headers
+    expect(a.x + a.points[2][0]).toBe(2 * 400 + 140); // lands on top-center of cluster 2
+    expect(a.roundness).toEqual({ type: 2 });
+    const wider = find(routeArrows([...els, arrow('f', 0, 3)]), 'f');
+    expect(wider.points[1][1]).toBeLessThan(a.points[1][1]); // longer span arcs higher
+  });
+
+  it('works backwards too, and centers the label on the arc peak', () => {
+    const out = routeArrows([...els, arrow('e', 3, 1), { id: 'e-label', type: 'text', containerId: 'e', x: 0, y: 0, width: 40, height: 20 }]);
+    const a = find(out, 'e');
+    expect(a.points[2][0]).toBeLessThan(0); // runs right to left
+    const label = find(out, 'e-label');
+    expect(label.x + 20).toBe(a.x + a.points[1][0]);
+    expect(label.y + 10).toBe(a.y + a.points[1][1]);
+    expect(arrowCenterBox(a)).toMatchObject({ x: a.x + a.points[1][0] - 40 });
   });
 });

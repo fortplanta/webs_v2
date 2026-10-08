@@ -43,6 +43,17 @@ export function routeArrows(els: El[]): El[] {
     if (el.type !== 'arrow' || !el.startBinding || !el.endBinding) return el;
     const a = byId.get(el.startBinding.elementId), b = byId.get(el.endBinding.elementId);
     if (!a || !b) return el;
+
+    // Non-adjacent clusters in the same row: arc over the headers in between instead of cutting through them.
+    const span = Math.abs((a.customData?.index ?? 0) - (b.customData?.index ?? 0));
+    if (a.customData?.kind === 'cluster' && b.customData?.kind === 'cluster' && span >= 2 && Math.abs(a.y - b.y) < 1) {
+      const p1 = { x: a.x + a.width / 2, y: a.y }, p2 = { x: b.x + b.width / 2, y: b.y };
+      const lift = 50 + 40 * (span - 1);
+      const dx = p2.x - p1.x;
+      mids.set(el.id, { x: (p1.x + p2.x) / 2, y: p1.y - lift });
+      return { ...el, x: p1.x, y: p1.y, width: Math.abs(dx), height: lift, points: [[0, 0], [dx / 2, -lift], [dx, 0]], roundness: { type: 2 } };
+    }
+
     const ca = { x: a.x + a.width / 2, y: a.y + a.height / 2 }, cb = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
     const p1 = clip(a, cb), p2 = clip(b, ca);
     mids.set(el.id, { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 });
