@@ -2,10 +2,12 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import { runStrategy } from '../backend/strategies';
 import { warmUp } from '../backend/llm';
+import { WebStore } from '../backend/db';
 
 // KB lives next to the project in dev; override with WEBS_KB_DIR.
 process.env.WEBS_KB_DIR ??= path.resolve(app.getAppPath(), 'kb');
 
+let store: WebStore;
 const running = new Map<string, AbortController>();
 const key = (senderId: number, id: number) => `${senderId}:${id}`;
 
@@ -24,6 +26,11 @@ ipcMain.on('webs:start', async (e, id: number, query: string) => {
 });
 
 ipcMain.on('webs:cancel', (e, id: number) => running.get(key(e.sender.id, id))?.abort());
+
+ipcMain.handle('webs:list', () => store.list());
+ipcMain.handle('webs:load', (_e, id: string) => store.get(id));
+ipcMain.handle('webs:save', (_e, input) => store.save(input));
+ipcMain.handle('webs:delete', (_e, id: string) => store.delete(id));
 
 let lastWarm = 0;
 function warmOnce() {
@@ -47,5 +54,10 @@ function createWindow() {
   else win.loadFile(path.join(__dirname, '../renderer/index.html'));
 }
 
-app.whenReady().then(() => { warmOnce(); createWindow(); });
+app.whenReady().then(() => {
+  store = new WebStore(process.env.WEBS_DB?.trim() || path.join(app.getPath('userData'), 'webs.db'));
+  warmOnce();
+  createWindow();
+});
+app.on('will-quit', () => store?.close());
 app.on('window-all-closed', () => app.quit());

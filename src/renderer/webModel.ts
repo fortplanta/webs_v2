@@ -1,22 +1,9 @@
 // Renderer-side state for one generation. Pure reducer over backend WebEvents.
 
-import type { GeneratedFragment, KbPassage, OverviewEdge, WebEvent } from '../backend/events';
+import type { WebEvent } from '../backend/events';
+import type { ClusterModel, WebModel } from '../types/web';
 
-export interface ClusterModel {
-  title: string;
-  slots: Array<GeneratedFragment | null>;
-}
-
-export interface WebModel {
-  query: string;
-  phase: 'running' | 'done' | 'error' | 'cancelled';
-  status: string;
-  error: string | null;
-  kb: KbPassage[];
-  context: string | null;
-  clusters: ClusterModel[];
-  edges: OverviewEdge[];
-}
+export type { ClusterModel, WebModel };
 
 export function initialModel(query: string): WebModel {
   return { query, phase: 'running', status: 'Searching knowledge base…', error: null, kb: [], context: null, clusters: [], edges: [] };
