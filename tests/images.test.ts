@@ -139,19 +139,36 @@ describe('image files are stored with the web', () => {
 
 describe('revealView', () => {
   const view = { scrollX: 0, scrollY: 0, zoom: 1, width: 1000, height: 600 };
+  const screen = (v: { scrollX: number; scrollY: number; zoom: number }, x: number, y: number) => ({ x: (x + v.scrollX) * v.zoom, y: (y + v.scrollY) * v.zoom });
+
   it('does nothing when the new content is already fully visible', () => {
     expect(revealView(view, { x: 100, y: 100, width: 300, height: 200 })).toBeNull();
   });
-  it('re-centers off-screen content without zooming in', () => {
-    const v = revealView(view, { x: 2000, y: 1000, width: 300, height: 200 })!;
-    expect(v.zoom).toBe(1); // small content: keep the zoom
-    expect(2150 * v.zoom + v.scrollX * v.zoom).toBeCloseTo(500); // its center lands mid-viewport (x)
-    expect(1100 * v.zoom + v.scrollY * v.zoom).toBeCloseTo(300); // (y)
+
+  it('moves as little as possible: scrolls only the axis that needs it, and never zooms in', () => {
+    const right = revealView(view, { x: 1500, y: 150, width: 300, height: 200 })!;
+    expect(right.zoom).toBe(1);
+    expect(right.scrollY).toBe(0); // y was fine, so the vertical position is left alone
+    expect(screen(right, 1800, 0).x).toBeLessThanOrEqual(1000); // right edge now on screen, with padding
+    expect(screen(right, 1500, 0).x).toBeGreaterThan(0);
+
+    const below = revealView(view, { x: 100, y: 700, width: 300, height: 200 })!;
+    expect(below.scrollX).toBe(0); // x untouched
+    expect(screen(below, 0, 900).y).toBeLessThanOrEqual(600); // bottom edge on screen
+    expect(below.zoom).toBe(1);
   });
-  it('zooms out only as far as needed to fit wide content, never in', () => {
+
+  it('keeps room for the toolbars along the top and bottom', () => {
+    const below = revealView(view, { x: 100, y: 700, width: 300, height: 200 })!;
+    expect(600 - screen(below, 0, 900).y).toBeGreaterThanOrEqual(96); // clear of the bottom toolbar
+    const above = revealView({ ...view, scrollY: -2000 }, { x: 100, y: 50, width: 300, height: 100 })!; // view looks at y≥2000
+    expect(screen(above, 0, 50).y).toBeGreaterThanOrEqual(96); // clear of the top toolbar
+  });
+
+  it('zooms out only as far as needed when the content cannot fit, keeping the view center', () => {
     const v = revealView(view, { x: 0, y: 0, width: 3000, height: 300 })!;
-    expect(v.zoom).toBeCloseTo((1000 * 0.85) / 3000);
+    expect(v.zoom).toBeCloseTo((1000 - 48) / 3000);
     const zoomedOut = revealView({ ...view, zoom: 0.2 }, { x: 5000, y: 0, width: 300, height: 200 })!;
-    expect(zoomedOut.zoom).toBe(0.2);
+    expect(zoomedOut.zoom).toBe(0.2); // already small enough: never zooms in
   });
 });
