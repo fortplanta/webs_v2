@@ -31,12 +31,14 @@ interface Props {
 
 type Editing =
   | { kind: 'fragment'; id: string; fragment: GeneratedFragment }
-  | { kind: 'cluster'; id: string; title: string }
+  | { kind: 'cluster'; id: string; title: string; lens?: string }
   | { kind: 'edge'; id: string; label: string }
   | { kind: 'image'; id: string; data: ImageCardData }
   | null;
 
 const SAVE_DEBOUNCE_MS = 800;
+/** How much of the viewport framed content may fill — less than 1, since toolbars float over the canvas edges. */
+const FIT_FACTOR = 0.78;
 const INBOX_POLL_MS = 30_000;
 
 interface InboxState { items: InboxItem[]; unsupported: number; error: string | null; busy: boolean }
@@ -82,7 +84,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   function frame(elements: El[], animate: boolean) {
     const target = elements.filter(e => !e.isDeleted);
     if (!api || target.length === 0) return;
-    requestAnimationFrame(() => api.scrollToContent(target as any, { fitToViewport: true, viewportZoomFactor: 0.9, animate }));
+    requestAnimationFrame(() => api.scrollToContent(target as any, { fitToViewport: true, viewportZoomFactor: FIT_FACTOR, animate }));
   }
 
   // A reopened web is shown as stored; just fit it to the viewport once.
@@ -131,7 +133,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     if (!el) return;
     api!.updateScene({ appState: { selectedElementIds: { [hit.id]: true } } as any });
     if (hit.kind === 'fragment') setEditing({ kind: 'fragment', id: hit.id, fragment: el.customData.fragment });
-    else if (hit.kind === 'cluster') setEditing({ kind: 'cluster', id: hit.id, title: el.customData.title });
+    else if (hit.kind === 'cluster') setEditing({ kind: 'cluster', id: hit.id, title: el.customData.title, lens: el.customData.lens });
     else if (hit.kind === 'image') setEditing({ kind: 'image', id: hit.id, data: el.customData });
     else setEditing({ kind: 'edge', id: hit.id, label: scene().find(e => e.type === 'text' && e.containerId === hit.id && !e.isDeleted)?.text ?? '' });
   }
@@ -174,7 +176,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     const el = byId(id);
     if (!el) return;
     apply(updateBox(scene(), id, { customData: { ...el.customData, title }, label: clusterLabel(title || ' ') }, build));
-    setEditing({ kind: 'cluster', id, title });
+    setEditing({ kind: 'cluster', id, title, lens: el.customData.lens });
   }
 
   function editEdge(id: string, label: string) {
@@ -386,7 +388,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
         <FragmentEditor key={editing.id} fragment={editing.fragment} onChange={f => editFragment(editing.id, f)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} />
       )}
       {editing?.kind === 'cluster' && (
-        <ClusterEditor key={editing.id} title={editing.title} onChange={t => editCluster(editing.id, t)} onAddFragment={() => addToCluster(editing.id)} onClose={() => setEditing(null)} />
+        <ClusterEditor key={editing.id} title={editing.title} lens={editing.lens} onChange={t => editCluster(editing.id, t)} onAddFragment={() => addToCluster(editing.id)} onClose={() => setEditing(null)} />
       )}
       {editing?.kind === 'edge' && (
         <EdgeEditor key={editing.id} label={editing.label} onChange={l => editEdge(editing.id, l)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} />

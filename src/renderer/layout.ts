@@ -39,7 +39,7 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
       type: 'rectangle', id: `kb-${i}`,
       x: -(FRAG_W + COL_GAP), y: i * (KB_H + GAP), width: FRAG_W, height: KB_H,
       strokeColor: 'transparent', backgroundColor: src.bg, fillStyle: 'solid', roundness: null,
-      label: { fontFamily: 2, text: `KB · ${clip(p.source, 30)}\n\n${wrap(clip(p.text, 110), 36)}`, fontSize: 11, strokeColor: src.text, textAlign: 'left', verticalAlign: 'top' },
+      label: { fontFamily: 2, text: `KB · ${clip(p.source, 30)}${p.lens ? ` · ${p.lens}` : ''}\n\n${wrap(clip(p.text, 110), 36)}`, fontSize: 11, strokeColor: src.text, textAlign: 'left', verticalAlign: 'top' },
     });
   });
 
@@ -50,7 +50,7 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
       type: 'rectangle', id: `cluster-${ci}`, x, y: clustersTop, width: FRAG_W, height: HEADER_H,
       strokeColor: '#1a1a1a', backgroundColor: 'transparent', roundness: null,
       label: clusterLabel(cluster.title),
-      customData: { kind: 'cluster', index: ci, title: cluster.title },
+      customData: { kind: 'cluster', index: ci, title: cluster.title, ...(cluster.lens ? { lens: cluster.lens } : {}) },
     });
 
     cluster.slots.forEach((frag, fi) => {

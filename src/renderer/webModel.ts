@@ -15,13 +15,20 @@ export function reduce(m: WebModel, ev: WebEvent): WebModel {
       return { ...m, status: ev.message };
     case 'kb':
       return { ...m, kb: ev.passages };
-    case 'overview':
+    case 'overview': {
+      // A later overview (e.g. the model's titles after an instant retrieval skeleton) updates the
+      // collections in place; it must not wipe cards that already arrived.
       return {
         ...m,
-        context: ev.context,
+        context: ev.context || m.context,
         edges: ev.edges,
-        clusters: ev.clusters.map(c => ({ title: c.title, slots: Array.from({ length: c.slots }, () => null) })),
+        clusters: ev.clusters.map((c, i) => {
+          const prev = m.clusters[i];
+          const slots = prev && prev.slots.length === c.slots ? prev.slots : Array.from({ length: c.slots }, () => null);
+          return { title: c.title, lens: c.lens ?? prev?.lens, slots };
+        }),
       };
+    }
     case 'fragment': {
       const clusters = m.clusters.map((c, i) =>
         i === ev.cluster ? { ...c, slots: c.slots.map((s, j) => (j === ev.slot ? ev.fragment : s)) } : c,
@@ -35,8 +42,9 @@ export function reduce(m: WebModel, ev: WebEvent): WebModel {
   }
 }
 
+/** Cards written so far / cards expected. Draft placeholders (KB excerpts awaiting the model) don't count as written. */
 export function progress(m: WebModel): { filled: number; total: number } {
   let filled = 0, total = 0;
-  for (const c of m.clusters) for (const s of c.slots) { total++; if (s) filled++; }
+  for (const c of m.clusters) for (const s of c.slots) { total++; if (s && !s.draft) filled++; }
   return { filled, total };
 }

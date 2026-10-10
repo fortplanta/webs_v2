@@ -19,7 +19,7 @@ export function defaultSettings(): Settings {
       disabledModules: [],
     },
     generation: {
-      strategy: process.env.WEBS_STRATEGY?.trim() || 'progressive',
+      strategy: process.env.WEBS_STRATEGY?.trim() || 'lensed',
       clusterCount: defaultWebConfig.clusterCount,
       fragmentsPerCluster: defaultWebConfig.fragmentsPerCluster,
     },

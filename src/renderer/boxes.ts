@@ -6,9 +6,12 @@ import type { FragmentType } from '../types/fragments';
 import { cssVar } from './theme';
 
 export const FRAG_W = 280;
-export const FRAG_H = 150;
+export const FRAG_H = 192;
 export const HEADER_H = 48;
 export const GAP = 24;
+
+/** Below this, a card's wording is mostly not found in its KB passage: flag it. */
+export const GROUNDING_WARN = 0.4;
 
 export const FRAGMENT_TYPES: FragmentType[] = ['person', 'concept', 'thesis', 'source', 'event', 'era', 'domain', 'quote'];
 
@@ -56,15 +59,20 @@ export function typeColors(type: FragmentType): { bg: string; text: string } {
   };
 }
 
+const baseName = (p: string) => p.split('/').pop() ?? p;
+
 export function fragmentLook(f: GeneratedFragment): { backgroundColor: string; label: LabelSpec } {
   const { bg, text } = typeColors(f.type);
-  const body = f.type === 'quote' ? f.body : clip(f.body, 150);
+  const body = f.type === 'quote' ? f.body : clip(f.body, 130);
+  const parts = [`${f.type.toUpperCase()}\n${f.title}\n\n${wrap(body, 36)}`];
+  if (f.bridge) parts.push(wrap(`↳ ${clip(f.bridge, 80)}`, 36));
+  if (f.kbSources?.length) {
+    parts.push(f.grounding !== undefined && f.grounding < GROUNDING_WARN ? '⚠ goes beyond your KB' : `▤ ${baseName(f.kbSources[0])}`);
+  }
+  if (f.link) parts.push(`↗ ${hostLabel(f.link)}`);
   return {
     backgroundColor: bg,
-    label: {
-      text: `${f.type.toUpperCase()}\n${f.title}\n\n${wrap(body, 36)}${f.link ? `\n\n↗ ${hostLabel(f.link)}` : ''}`,
-      fontSize: 12, strokeColor: text, fontFamily: 2, textAlign: 'left', verticalAlign: 'top',
-    },
+    label: { text: parts.join('\n\n'), fontSize: 12, strokeColor: text, fontFamily: 2, textAlign: 'left', verticalAlign: 'top' },
   };
 }
 

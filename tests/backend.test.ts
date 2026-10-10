@@ -52,7 +52,7 @@ describe('progressive strategy', () => {
 
   it('emits kb → overview → fragments (as they stream) → done', async () => {
     const llm = fakeLlm(overview, [frag(0, 'a1'), frag(0, 'a2') + frag(1, 'b1'), frag(1, 'b2')]);
-    const evs = await collect(runStrategy('q', { signal: new AbortController().signal, config: cfg, kb: kbOk, llm }));
+    const evs = await collect(runStrategy('q', { strategy: 'progressive', signal: new AbortController().signal, config: cfg, kb: kbOk, llm }));
     expect(evs.map(e => e.type)).toEqual(['kb', 'status', 'overview', 'status', 'fragment', 'fragment', 'fragment', 'fragment', 'done']);
     const slots = evs.filter(e => e.type === 'fragment').map((e: any) => [e.cluster, e.slot]);
     expect(slots).toEqual([[0, 0], [0, 1], [1, 0], [1, 1]]);
@@ -60,19 +60,19 @@ describe('progressive strategy', () => {
 
   it('falls back to a cluster with room when the model over-fills or mislabels', async () => {
     const llm = fakeLlm(overview, [frag(0, 'a1'), frag(0, 'a2'), frag(0, 'a3'), frag(7, 'x')]);
-    const evs = await collect(runStrategy('q', { signal: new AbortController().signal, config: cfg, kb: kbOk, llm }));
+    const evs = await collect(runStrategy('q', { strategy: 'progressive', signal: new AbortController().signal, config: cfg, kb: kbOk, llm }));
     expect(evs.filter(e => e.type === 'fragment').map((e: any) => e.cluster)).toEqual([0, 0, 1, 1]);
   });
 
   it('reports kb-empty immediately, before any LLM call', async () => {
     const llm = { call: vi.fn(), stream: vi.fn() } as unknown as LlmService;
-    const evs = await collect(runStrategy('q', { signal: new AbortController().signal, config: cfg, kb: { search: async () => [] }, llm }));
+    const evs = await collect(runStrategy('q', { strategy: 'progressive', signal: new AbortController().signal, config: cfg, kb: { search: async () => [] }, llm }));
     expect(evs).toEqual([{ type: 'error', code: 'kb-empty', message: expect.any(String) }]);
     expect(llm.call).not.toHaveBeenCalled();
   });
 
   it('errors if the model yields no usable fragments', async () => {
-    const evs = await collect(runStrategy('q', { signal: new AbortController().signal, config: cfg, kb: kbOk, llm: fakeLlm(overview, ['nothing here']) }));
+    const evs = await collect(runStrategy('q', { strategy: 'progressive', signal: new AbortController().signal, config: cfg, kb: kbOk, llm: fakeLlm(overview, ['nothing here']) }));
     expect(evs.at(-1)).toMatchObject({ type: 'error', code: 'bad-json' });
   });
 });

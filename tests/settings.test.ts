@@ -86,7 +86,7 @@ describe('settings reach the runtime', () => {
       call: async () => JSON.stringify({ context: 'c', clusters: [{ title: 'A' }, { title: 'B' }], edges: [] }),
       async *stream() { yield '{"cluster":0,"type":"person","title":"t","body":"b"}'; },
     };
-    for await (const e of runStrategy('q', { signal: new AbortController().signal, kb: { search: async () => [{ source: 's', text: 't' }] }, llm })) evs.push(e);
+    for await (const e of runStrategy('q', { strategy: 'progressive', signal: new AbortController().signal, kb: { search: async () => [{ source: 's', text: 't' }] }, llm })) evs.push(e);
     const ov = evs.find(e => e.type === 'overview') as Extract<WebEvent, { type: 'overview' }>;
     expect(ov.clusters.map(c => c.slots)).toEqual([5, 5]);
   });

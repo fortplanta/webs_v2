@@ -4,6 +4,8 @@ import type { GeneratedFragment, KbPassage, OverviewEdge } from '../backend/even
 
 export interface ClusterModel {
   title: string;
+  /** The retrieval route this collection came from, if any. */
+  lens?: string;
   slots: Array<GeneratedFragment | null>;
 }
 

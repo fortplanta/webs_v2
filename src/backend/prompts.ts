@@ -84,3 +84,69 @@ Rules:
 - Only quote text that appears in the knowledge base excerpts or that you are certain is verbatim.
 - Output JSON Lines only. Each object on its own line.`;
 }
+
+// ── "lensed" strategy: the passages are chosen by retrieval; the model only titles and writes ──────────
+
+import type { Collection } from './retrieval/retrieve';
+
+const clip = (t: string, n: number) => (t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t);
+
+/** Passage ids (P1, P2, …) are assigned in collection order and used to tie model output back to the KB. */
+export function passageIds(collections: Collection[]): string[][] {
+  let n = 0;
+  return collections.map(c => c.passages.map(() => `P${++n}`));
+}
+
+function renderCollections(collections: Collection[]): string {
+  const ids = passageIds(collections);
+  return collections.map((c, ci) => `Collection ${ci} — ${c.label}\n` + c.passages.map((p, pi) => `  [${ids[ci][pi]}] (${p.source}${p.heading ? ` · ${p.heading}` : ''}${p.via ? ` · reached through "${p.via.slice(0, 3).join(', ')}"` : ''})\n  ${clip(p.text, 900)}`).join('\n')).join('\n\n');
+}
+
+export const LENSED_OVERVIEW_SYSTEM_PROMPT = `You are a knowledge canvas planner. You are given a topic and collections of passages from the user's knowledge base, each collection reached by a different route. You name the collections and describe how they relate.
+
+${JSON_ONLY} Your response must start with { and end with }.`;
+
+export function buildLensedOverviewMessage(query: string, collections: Collection[]): string {
+  return `Topic: "${query}"
+
+${renderCollections(collections)}
+
+Return ONLY valid JSON matching this exact shape:
+
+{
+  "context": "2-3 sentences grounding the topic, using only what the passages say",
+  "clusters": [ { "title": "2-4 words naming what this collection shows about the topic" } ],
+  "edges": [ { "source": 0, "target": 1, "label": "verb phrase" } ]
+}
+
+Rules:
+- Exactly ${collections.length} clusters, in the same order as the collections above.
+- "source" and "target" are 0-based collection indexes. Connect collection 0 to each of the others, and add a link between two others only when the passages clearly support it.
+- Edge labels are verb phrases, not nouns: "led to", "put to use in", "contested by".
+- Use only the passages above; do not add outside facts.
+- Return raw JSON only. Start with { and end with }.`;
+}
+
+export const LENSED_FRAGMENTS_SYSTEM_PROMPT = `You are a knowledge canvas writer. You turn passages from the user's knowledge base into short cards, one JSON object per line, and you never go beyond what the passages say.
+
+CRITICAL: Output ONLY JSON objects, one per line (JSON Lines). No array wrapper. No markdown code fences. No preamble. No commentary.`;
+
+export function buildLensedFragmentsMessage(query: string, context: string, collections: Collection[]): string {
+  const ids = passageIds(collections);
+  return `Topic: "${query}"
+Overview: ${context}
+
+${renderCollections(collections)}
+
+Write exactly one card for every passage, in order (${ids.flat().join(', ')}), one JSON object per line:
+
+{"passage": "P1", "type": "person | concept | thesis | source | event | era | domain | quote", "title": "card title (2-5 words, lowercase)", "body": "2-3 sentences", "bridge": "one sentence on how this connects to the topic", "tags": ["tag1", "tag2"]}
+
+Rules:
+- "passage" is the id of the passage the card is based on. Use each id once.
+- "body" restates what that passage says. Do not add facts, names, dates or numbers that are not in the passage.
+- "bridge" names the idea that connects this card to the topic "${query}" (for passages reached through an idea, name that idea). One sentence.
+- Choose "type" by what the card actually is: person, concept, thesis (a contested claim), source (a document or reference), event, era, domain, or quote (verbatim text from the passage only).
+- "tags": 2-4 lowercase words. Omit for quotes.
+- Output JSON Lines only. Each object on its own line.`;
+}

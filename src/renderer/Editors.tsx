@@ -58,6 +58,15 @@ export function FragmentEditor({ fragment, onChange, onDelete, onClose }: {
       <label>Date / era <span className="meta">optional</span>
         <input value={date} onChange={e => setDate(e.target.value)} placeholder="e.g. 1789 or 1914–1918" />
       </label>
+      <label>How it connects <span className="meta">the bridge to the topic</span>
+        <input value={fragment.bridge ?? ''} onChange={e => set({ bridge: e.target.value || undefined })} />
+      </label>
+      {fragment.kbSources?.length ? (
+        <div className="hint">
+          From {fragment.kbSources.join(', ')}{fragment.lens ? ` · route: ${fragment.lens}` : ''}
+          {fragment.grounding !== undefined && <> · {Math.round(fragment.grounding * 100)}% of its wording is in that passage</>}
+        </div>
+      ) : null}
       <label>Source link <span className="meta">optional · opens in your browser</span>
         <input
           value={link}
@@ -75,8 +84,9 @@ export function FragmentEditor({ fragment, onChange, onDelete, onClose }: {
   );
 }
 
-export function ClusterEditor({ title, onChange, onAddFragment, onClose }: {
+export function ClusterEditor({ title, lens, onChange, onAddFragment, onClose }: {
   title: string;
+  lens?: string;
   onChange: (title: string) => void;
   onAddFragment: () => void;
   onClose: () => void;
@@ -88,6 +98,7 @@ export function ClusterEditor({ title, onChange, onAddFragment, onClose }: {
       <label>Title
         <input ref={ref} value={title} onChange={e => onChange(e.target.value)} />
       </label>
+      {lens && <div className="hint">Found through the “{lens}” route.</div>}
       <div className="editor-actions">
         <button onClick={onAddFragment}>Add fragment here</button>
         <button onClick={onClose}>Done</button>
