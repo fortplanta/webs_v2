@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Placeholder app icon: seed colour (#D2F34C) tile with a three-node web. Replace freely. -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#D2F34C"/>
+  <g stroke="#0a0a0a" stroke-width="30" stroke-linecap="round" fill="none">
+    <line x1="512" y1="330" x2="340" y2="650"/>
+    <line x1="512" y1="330" x2="684" y2="650"/>
+    <line x1="340" y1="650" x2="684" y2="650"/>
+  </g>
+  <g fill="#0a0a0a">
+    <circle cx="512" cy="330" r="74"/>
+    <circle cx="340" cy="650" r="74"/>
+    <circle cx="684" cy="650" r="74"/>
+  </g>
+</svg>

@@ -60,6 +60,8 @@ export interface WebsApi {
   listKbModules(dir: string): Promise<KbModuleInfo[]>;
   /** Native folder picker; resolves to null if cancelled. */
   pickKbFolder(): Promise<string | null>;
+  /** Open the saved KB folder in Finder. Resolves to an error message, or null on success. */
+  revealKbFolder(): Promise<string | null>;
 
   /** Pending captures from the webs-capture service (empty-handed if not configured/reachable). */
   getInbox(): Promise<InboxResult>;

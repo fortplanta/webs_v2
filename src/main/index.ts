@@ -1,6 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { runStrategy, strategies } from '../backend/strategies';
 import { runPivot } from '../backend/pivot';
 import { listOllamaModels, warmUp } from '../backend/llm';
@@ -10,10 +11,40 @@ import { defaultSettings, getSettings, getSettingsOverrides, mergePatches, setSe
 import type { SaveSettingsResult, SettingsBundle, SettingsPatch } from '../types/settings';
 import { WebStore } from '../backend/db';
 
-// KB lives next to the project in dev; override with WEBS_KB_DIR.
-process.env.WEBS_KB_DIR ??= path.resolve(app.getAppPath(), 'kb');
+import { migrateLegacyDb, seedKb } from '../backend/firstRun';
+
+// A packaged app runs a single instance (two would write the same database). Dev builds are exempt, so
+// `npm run dev` still works while the packaged app is open.
+if (app.isPackaged && !app.requestSingleInstanceLock()) app.quit();
+
+/**
+ * Where the knowledge base lives unless WEBS_KB_DIR or Settings say otherwise: the repo's kb/ in dev; in a
+ * packaged app a writable ~/Documents/Webs/KB, created from the bundled sample notes on first launch.
+ */
+async function resolveDefaultKbDir(): Promise<string> {
+  if (!app.isPackaged) return path.resolve(app.getAppPath(), 'kb');
+  const dir = path.join(app.getPath('documents'), 'Webs', 'KB');
+  await seedKb(path.join(process.resourcesPath, 'kb-sample'), dir).catch(err => console.warn('Could not seed the sample KB:', err));
+  return dir;
+}
 
 let store: WebStore;
+// The production renderer is served from webs://app/ rather than file://. Chromium won't fetch() file: URLs,
+// which Excalidraw uses to load its (locally bundled) fonts, and a real origin is safer in general.
+const APP_SCHEME = 'webs';
+const APP_ORIGIN = `${APP_SCHEME}://app`;
+protocol.registerSchemesAsPrivileged([{ scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
+
+function serveRenderer() {
+  const root = path.join(__dirname, '../renderer');
+  protocol.handle(APP_SCHEME, req => {
+    const { pathname } = new URL(req.url);
+    const file = path.normalize(path.join(root, decodeURIComponent(pathname === '/' ? '/index.html' : pathname)));
+    if (file !== root && !file.startsWith(root + path.sep)) return new Response('Forbidden', { status: 403 }); // no escaping the renderer folder
+    return net.fetch(pathToFileURL(file).toString());
+  });
+}
+
 const running = new Map<string, AbortController>();
 const key = (senderId: number, id: number) => `${senderId}:${id}`;
 
@@ -84,6 +115,7 @@ ipcMain.handle('settings:reset', async () => {
   return settingsBundle();
 });
 
+ipcMain.handle('settings:reveal-kb', async () => (await shell.openPath(getSettings().kb.dir)) || null); // '' on success, else an error message
 ipcMain.handle('settings:ollama-models', (_e, baseUrl: string) => listOllamaModels(baseUrl));
 ipcMain.handle('settings:kb-modules', (_e, dir: string) => listKbModules(dir));
 ipcMain.handle('settings:pick-kb-folder', async () => {
@@ -120,16 +152,30 @@ function createWindow() {
   win.webContents.on('will-navigate', (e, url) => {
     const dev = process.env.ELECTRON_RENDERER_URL;
     if (dev && new URL(url).origin === new URL(dev).origin) return; // dev-server reloads
+    if (url.startsWith(`${APP_ORIGIN}/`)) return; // the app's own pages
     e.preventDefault();
     openExternal(url);
   });
   if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL);
-  else win.loadFile(path.join(__dirname, '../renderer/index.html'));
+  else win.loadURL(`${APP_ORIGIN}/index.html`);
 }
 
-app.whenReady().then(() => {
-  store = new WebStore(process.env.WEBS_DB?.trim() || path.join(app.getPath('userData'), 'webs.db'));
+app.on('second-instance', () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+});
+
+app.whenReady().then(async () => {
+  const dbFile = process.env.WEBS_DB?.trim() || path.join(app.getPath('userData'), 'webs.db');
+  if (!process.env.WEBS_DB) {
+    // This app used to store its data under the package name; bring that library across once.
+    try { migrateLegacyDb(path.join(app.getPath('appData'), 'webs-v1a', 'webs.db'), dbFile); }
+    catch (err) { console.warn('Could not migrate the earlier library:', err); }
+  }
+  process.env.WEBS_KB_DIR ??= await resolveDefaultKbDir();
+  store = new WebStore(dbFile);
   setSettingsOverrides(store.getSetting<SettingsPatch>(SETTINGS_KEY) ?? {});
+  serveRenderer();
   warmOnce();
   createWindow();
 });

@@ -137,6 +137,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
               <span className="row">
                 <input value={draft.kb.dir} onChange={e => set('kb', 'dir', e.target.value)} spellCheck={false} />
                 <button type="button" onClick={browse}>Browse…</button>
+                <button type="button" onClick={() => { void window.webs.revealKbFolder(); }} title="Show the saved folder in Finder">Open</button>
               </span>
             </label>
             {err('kb.dir')}

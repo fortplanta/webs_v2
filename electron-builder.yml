@@ -1,0 +1,40 @@
+# Packaging for macOS (Apple Silicon). `npm run pack` builds an unpacked .app to try out; `npm run dist`
+# also builds the .dmg and .zip. Output goes to release/.
+appId: com.webs.desktop
+productName: Webs
+copyright: Copyright © Anton
+
+directories:
+  output: release
+  buildResources: build
+
+# Everything the app needs is bundled into out/ by electron-vite, so nothing else is shipped.
+files:
+  - out/**/*
+  - package.json
+
+# Sample notes, copied to ~/Documents/Webs/KB on first launch (see src/main/index.ts).
+extraResources:
+  - from: kb
+    to: kb-sample
+    filter:
+      - "**/*.md"
+
+asar: true
+
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  target:
+    - target: dmg
+      arch: [arm64]
+    - target: zip
+      arch: [arm64]
+  # Ad-hoc signed ("-"): a valid seal, but not an Apple Developer ID signature and not notarized. Apps built
+  # and run on this Mac are fine; one that arrives by download/AirDrop needs right-click → Open the first
+  # time. Put a real Developer ID name here (and enable notarization) to distribute it.
+  identity: "-"
+  hardenedRuntime: false
+
+dmg:
+  title: Webs
