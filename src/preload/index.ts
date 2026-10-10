@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { WebEvent } from '../backend/events';
+import type { PivotEvent, WebEvent } from '../backend/events';
 import type { WebsApi } from '../types/ipc';
 
 let nextId = 1;
@@ -17,6 +17,20 @@ const api: WebsApi = {
     return () => {
       ipcRenderer.removeListener('webs:event', handler);
       ipcRenderer.send('webs:cancel', id);
+    };
+  },
+  pivot(req, onEvent) {
+    const id = nextId++;
+    const handler = (_e: unknown, evId: number, event: PivotEvent) => {
+      if (evId !== id) return;
+      onEvent(event);
+      if (event.type === 'done' || event.type === 'error') ipcRenderer.removeListener('webs:pivot-event', handler);
+    };
+    ipcRenderer.on('webs:pivot-event', handler);
+    ipcRenderer.send('webs:pivot-start', id, req);
+    return () => {
+      ipcRenderer.removeListener('webs:pivot-event', handler);
+      ipcRenderer.send('webs:pivot-cancel', id);
     };
   },
   warmUp() { ipcRenderer.send('webs:warmup'); },

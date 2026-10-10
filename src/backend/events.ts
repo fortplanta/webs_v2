@@ -30,6 +30,8 @@ export interface GeneratedFragment {
   bridge?: string;
   /** KB files this card is based on. */
   kbSources?: string[];
+  /** Ids of the KB passages it is based on (file#n), so later explorations can avoid repeating them. */
+  kbPassageIds?: string[];
   /** 0–1: how much of the card's wording is found in its KB passage. Low = went beyond the KB. */
   grounding?: number;
   /** The retrieval route that surfaced it. */
@@ -49,5 +51,25 @@ export type WebEvent =
   | { type: 'kb'; passages: KbPassage[] }
   | { type: 'overview'; context: string; clusters: Array<{ title: string; slots: number; lens?: string }>; edges: OverviewEdge[] }
   | { type: 'fragment'; cluster: number; slot: number; fragment: GeneratedFragment }
+  | { type: 'done' }
+  | { type: 'error'; code: WebsErrorCode; message: string };
+
+// ── Pivot: grow one new collection out of an existing card ───────────────────────────────────────
+
+export interface PivotRequest {
+  /** The card to explore from. */
+  card: GeneratedFragment;
+  /** KB passage ids already on the canvas; a pivot never repeats them. */
+  usedPassageIds: string[];
+}
+
+export type PivotEvent =
+  | { type: 'status'; message: string }
+  /** The new collection, straight from the KB (instant): route, default edge label, one draft card per passage. */
+  | { type: 'plan'; title: string; lens: string; edge: string; cards: GeneratedFragment[] }
+  /** The model's title and edge label. */
+  | { type: 'title'; title: string; edge?: string }
+  /** The model's card for slot `slot`, replacing the draft. */
+  | { type: 'card'; slot: number; fragment: GeneratedFragment }
   | { type: 'done' }
   | { type: 'error'; code: WebsErrorCode; message: string };

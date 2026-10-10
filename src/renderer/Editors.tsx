@@ -20,11 +20,14 @@ function Panel({ title, onClose, children }: Shell) {
   );
 }
 
-export function FragmentEditor({ fragment, onChange, onDelete, onClose }: {
+export function FragmentEditor({ fragment, onChange, onDelete, onClose, onPivot, pivoting }: {
   fragment: GeneratedFragment;
   onChange: (next: GeneratedFragment) => void;
   onDelete: () => void;
   onClose: () => void;
+  /** Grow a new collection from this card. */
+  onPivot?: () => void;
+  pivoting?: boolean;
 }) {
   const [tags, setTags] = useState((fragment.tags ?? []).join(', '));
   const [link, setLink] = useState(fragment.link ?? '');
@@ -76,6 +79,12 @@ export function FragmentEditor({ fragment, onChange, onDelete, onClose }: {
         />
       </label>
       {link.trim() !== '' && !isHttpUrl(link.trim()) && <div className="field-error" role="alert">Use a full http:// or https:// address.</div>}
+      {onPivot && (
+        <div className="explore">
+          <button onClick={onPivot} disabled={pivoting}>{pivoting ? 'Exploring…' : '↗ Explore a different angle'}</button>
+          <div className="hint">Finds notes in your KB related to this card that aren't on the canvas yet, and adds them as a new collection.</div>
+        </div>
+      )}
       <div className="editor-actions">
         <button className="danger" onClick={onDelete}>Delete fragment</button>
         <button onClick={onClose}>Done</button>

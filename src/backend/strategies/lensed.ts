@@ -32,6 +32,7 @@ export function provisionalFragment(p: SelectedPassage, collection: Collection):
     tags: [p.lens],
     bridge: p.via?.length ? `Connected through “${p.via.slice(0, 2).join(', ')}”.` : `Surfaced by the “${collection.label}” route.`,
     kbSources: [p.source],
+    kbPassageIds: [p.id],
     grounding: 1,
     lens: p.lens,
     draft: true,
@@ -111,7 +112,7 @@ export const lensed: Strategy = async function* (ctx) {
         const w = where.get(hit.id)!;
         const bridge = typeof (obj as any).bridge === 'string' ? clip((obj as any).bridge.trim(), 200) : undefined;
         const fragment: GeneratedFragment = {
-          ...f, bridge: bridge || undefined, kbSources: [w.p.source], lens: w.p.lens,
+          ...f, bridge: bridge || undefined, kbSources: [w.p.source], kbPassageIds: [w.p.id], lens: w.p.lens,
           grounding: groundingScore(`${f.title} ${f.body}`, w.p.terms, retrieval.terms),
         };
         yield { type: 'fragment', cluster: w.cluster, slot: w.slot, fragment };

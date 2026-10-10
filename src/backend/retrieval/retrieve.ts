@@ -45,13 +45,13 @@ export interface Retrieval {
 
 interface Candidate { p: IndexedPassage; lens: string; rel: number; conn: number; dist: number; via?: string[] }
 
-function bridgeTermsFor(index: PassageIndex, top: IndexedPassage[], queryTerms: Set<string>, k: number): Map<string, number> {
+function bridgeTermsFor(index: PassageIndex, top: IndexedPassage[], queryTerms: Set<string>, k: number, pool: IndexedPassage[] = index.passages): Map<string, number> {
   const topIds = new Set(top.map(p => p.id));
   const score = new Map<string, number>();
   for (const p of top) for (const [t, f] of p.tf) {
     if (queryTerms.has(t) || /^\d+$/.test(t)) continue;
     // must also occur somewhere else, or following it leads nowhere
-    const elsewhere = index.passages.some(o => !topIds.has(o.id) && o.tf.has(t));
+    const elsewhere = pool.some(o => !topIds.has(o.id) && o.tf.has(t));
     if (!elsewhere) continue;
     score.set(t, (score.get(t) ?? 0) + f * index.idf(t));
   }
@@ -60,14 +60,24 @@ function bridgeTermsFor(index: PassageIndex, top: IndexedPassage[], queryTerms: 
   return new Map(best.map(([t, s]) => [t, s / max]));
 }
 
-export function retrieve(index: PassageIndex, query: string, cfg: RetrieveConfig): Retrieval {
-  const q = [...new Set(terms(query))];
+export interface RetrieveOptions {
+  /** Passage ids that must not be selected (already on the canvas). */
+  exclude?: ReadonlySet<string>;
+}
+
+export function retrieve(index: PassageIndex, query: string, cfg: RetrieveConfig, opts: RetrieveOptions = {}): Retrieval {
+  return retrieveTerms(index, query, [...new Set(terms(query))], cfg, opts);
+}
+
+/** Like retrieve(), but from already-normalized terms (e.g. picked from a card rather than typed). */
+export function retrieveTerms(index: PassageIndex, query: string, q: string[], cfg: RetrieveConfig, opts: RetrieveOptions = {}): Retrieval {
   const empty: Retrieval = { query, terms: q, collections: [], considered: 0 };
   if (q.length === 0 || index.passages.length === 0) return empty;
 
   // 1. direct matches
   const qWeights = new Map(q.map(t => [t, 1]));
-  const scored = index.passages.map(p => ({ p, s: index.bm25(p, qWeights) }));
+  const eligible = index.passages.filter(p => !opts.exclude?.has(p.id));
+  const scored = eligible.map(p => ({ p, s: index.bm25(p, qWeights) }));
   const maxS = Math.max(...scored.map(x => x.s));
   if (!(maxS > 0)) return empty;
   const direct = scored.filter(x => x.s > 0 && x.s >= cfg.relevanceFloor * maxS).map(x => ({ p: x.p, rel: x.s / maxS }));
@@ -87,9 +97,9 @@ export function retrieve(index: PassageIndex, query: string, cfg: RetrieveConfig
 
   // 3. bridges
   const top = [...direct].sort((a, b) => b.rel - a.rel).slice(0, 3).map(d => d.p);
-  const bridge = bridgeTermsFor(index, top, new Set(q), cfg.bridgeTerms);
+  const bridge = bridgeTermsFor(index, top, new Set(q), cfg.bridgeTerms, eligible);
   if (bridge.size > 0) {
-    for (const p of index.passages) {
+    for (const p of eligible) {
       if (directIds.has(p.id)) continue;
       const hits = [...bridge.keys()].filter(t => p.termSet.has(t));
       if (hits.length === 0) continue;

@@ -5,7 +5,8 @@
 
 const STOPWORDS = new Set((
   'a about above after again against all also am an and any are as at be because been before being below between both but by can could did do does doing down during each few for from further had has have having he her here hers him his how i if in into is it its itself just me more most my no nor not of off on once only or other our out over own same she should so some such than that the their theirs them then there these they this those through to too under until up very was we were what when where which while who whom why will with would you your ' +
-  'one two may many much often used use using also however although within without among around across per via'
+  'one two may many much often used use using also however although within without among around across per via ' +
+  'first second third early earlier later new old made make makes became become becomes including included various different major large small long short year years several still even yet'
 ).split(/\s+/).filter(Boolean));
 
 const undouble = (w: string) => (/([b-df-hj-np-tv-z])\1$/.test(w) && !/(ll|ss|zz)$/.test(w) ? w.slice(0, -1) : w);

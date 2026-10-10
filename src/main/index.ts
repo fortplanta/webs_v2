@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { runStrategy, strategies } from '../backend/strategies';
+import { runPivot } from '../backend/pivot';
 import { listOllamaModels, warmUp } from '../backend/llm';
 import { listKbModules } from '../backend/kb';
 import { listInbox, markComposted, markFiled, testCapture } from '../backend/capture';
@@ -31,6 +32,21 @@ ipcMain.on('webs:start', async (e, id: number, query: string) => {
 });
 
 ipcMain.on('webs:cancel', (e, id: number) => running.get(key(e.sender.id, id))?.abort());
+
+ipcMain.on('webs:pivot-start', async (e, id: number, req) => {
+  const k = `pivot:${key(e.sender.id, id)}`;
+  const controller = new AbortController();
+  running.set(k, controller);
+  try {
+    for await (const event of runPivot(req, { signal: controller.signal })) {
+      if (e.sender.isDestroyed()) break;
+      e.sender.send('webs:pivot-event', id, event);
+    }
+  } finally {
+    running.delete(k);
+  }
+});
+ipcMain.on('webs:pivot-cancel', (e, id: number) => running.get(`pivot:${key(e.sender.id, id)}`)?.abort());
 
 ipcMain.handle('webs:list', () => store.list());
 ipcMain.handle('webs:load', (_e, id: string) => store.get(id));

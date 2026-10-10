@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Excalidraw, restoreElements, viewportCoordsToSceneCoords } from '@excalidraw/excalidraw';
 import type { BinaryFileData, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import '@excalidraw/excalidraw/index.css';
-import type { GeneratedFragment } from '../backend/events';
+import type { GeneratedFragment, PivotEvent } from '../backend/events';
 import type { InboxItem } from '../types/capture';
 import type { SavedFile } from '../types/ipc';
 import { captionLabel, clusterLabel, edgeLabel, FRAG_H, FRAG_W, fragmentLook, GAP, HEADER_H } from './boxes';
@@ -10,6 +10,7 @@ import { fragmentFromCapture, fragmentFromPaste, looksLikeExcalidrawClipboard } 
 import { ClusterEditor, EdgeEditor, FragmentEditor, ImageCardEditor, InboxPanel } from './Editors';
 import { hitTest } from './hit';
 import { addImageCard, imageCardLayout, type ImageCardData } from './imageCard';
+import { addPivotCluster, addThread, placePivot, threadLabelBox, usedPassageIds } from './pivot';
 import { revealView } from './viewport';
 import { blobToDataURL, contentId, describeResize, ImageImportError, imageTypeOf, looksLikeImage, prepareImage } from './images';
 import { buildSkeletons } from './layout';
@@ -54,6 +55,8 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   const [inbox, setInbox] = useState<InboxState>(emptyInbox);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
+  const [pivot, setPivot] = useState<{ status: string } | null>(null);
+  const cancelPivot = useRef<(() => void) | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout>>();
   const fileInput = useRef<HTMLInputElement>(null);
   const savedFiles = useRef(new Set<string>((restoredFiles ?? []).map(f => f.id)));
@@ -92,7 +95,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     if (api && restored) frame(restoredScene as El[], false);
   }, [api, restored]);
 
-  useEffect(() => () => { clearTimeout(timer.current); clearTimeout(noticeTimer.current); }, []);
+  useEffect(() => () => { clearTimeout(timer.current); clearTimeout(noticeTimer.current); cancelPivot.current?.(); }, []);
 
   function say(kind: 'info' | 'error', text: string) {
     clearTimeout(noticeTimer.current);
@@ -194,6 +197,63 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     setEditing({ kind: 'image', id, data });
   }
 
+  /** Scroll (and zoom out if needed) just enough to show `bounds`; does nothing if already visible. */
+  function reveal(bounds: { x: number; y: number; width: number; height: number }) {
+    const a = api!.getAppState();
+    const next = revealView({ scrollX: a.scrollX, scrollY: a.scrollY, zoom: a.zoom.value, width: a.width, height: a.height }, bounds);
+    if (next) api!.updateScene({ appState: { scrollX: next.scrollX, scrollY: next.scrollY, zoom: { value: next.zoom } } as any });
+  }
+
+  /** Swap a card's content in place (used when the model's card replaces a draft excerpt). */
+  function replaceFragment(id: string, fragment: GeneratedFragment) {
+    const el = byId(id);
+    if (!el) return;
+    const look = fragmentLook(fragment);
+    apply(updateBox(scene(), id, { backgroundColor: look.backgroundColor, customData: { ...el.customData, fragment }, link: fragment.link ?? null, label: look.label }, build));
+  }
+
+  // ── Pivot: grow a new collection out of a card ────────────────────────────
+
+  function startPivot(cardId: string) {
+    const el = byId(cardId);
+    if (!api || !el || pivot) return;
+    setEditing(null);
+    setPivot({ status: 'Searching your KB…' });
+    const prefix = `pv-${crypto.randomUUID().slice(0, 8)}`;
+    cancelPivot.current = window.webs.pivot({ card: el.customData.fragment, usedPassageIds: usedPassageIds(scene()) }, ev => onPivotEvent(prefix, cardId, ev));
+  }
+
+  function stopPivot() {
+    cancelPivot.current?.();
+    cancelPivot.current = null;
+    setPivot(null);
+  }
+
+  function onPivotEvent(prefix: string, cardId: string, ev: PivotEvent) {
+    if (!api) return;
+    switch (ev.type) {
+      case 'status': setPivot({ status: ev.message }); break;
+      case 'plan': {
+        const pos = placePivot(scene(), cardId);
+        if (!pos) { stopPivot(); say('error', 'The card this was growing from is gone.'); return; }
+        const added = addPivotCluster(scene(), { id: prefix, ...pos, title: ev.title, lens: ev.lens, fromCardId: cardId, cards: ev.cards }, build);
+        apply(addThread(added.elements, { id: `${prefix}-thread`, fromId: cardId, toId: prefix, label: ev.edge }, build, raw => restoreElements([raw as any], null)[0] as unknown as El));
+        reveal({ x: pos.x, y: pos.y, width: FRAG_W, height: HEADER_H + GAP + ev.cards.length * (FRAG_H + GAP) });
+        break;
+      }
+      case 'title': {
+        const header = byId(prefix);
+        if (header) apply(updateBox(scene(), prefix, { customData: { ...header.customData, title: ev.title }, label: clusterLabel(ev.title) }, build));
+        const thread = byId(`${prefix}-thread`);
+        if (thread && ev.edge) apply(updateBox(scene(), thread.id, { label: edgeLabel(ev.edge), geometry: threadLabelBox(thread) }, build));
+        break;
+      }
+      case 'card': replaceFragment(`${prefix}-c${ev.slot}`, ev.fragment); break;
+      case 'done': setPivot(null); cancelPivot.current = null; break;
+      case 'error': setPivot(null); cancelPivot.current = null; say('error', ev.message); break;
+    }
+  }
+
   /** Every way an image arrives (button, paste, drop) comes through here. */
   async function importImages(files: File[], at?: { x: number; y: number }) {
     if (!api) return;
@@ -228,12 +288,9 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     }
     if (last) api.updateScene({ appState: { selectedElementIds: { [last]: true, [`${last}-image`]: true }, selectedGroupIds: { [`grp-${last}`]: true } } as any });
     if (placed.length) {
-      // bring what was just added into view
       const x1 = Math.min(...placed.map(b => b.x)), y1 = Math.min(...placed.map(b => b.y));
       const x2 = Math.max(...placed.map(b => b.x + b.width)), y2 = Math.max(...placed.map(b => b.y + b.height));
-      const a = api.getAppState();
-      const next = revealView({ scrollX: a.scrollX, scrollY: a.scrollY, zoom: a.zoom.value, width: a.width, height: a.height }, { x: x1, y: y1, width: x2 - x1, height: y2 - y1 });
-      if (next) api.updateScene({ appState: { scrollX: next.scrollX, scrollY: next.scrollY, zoom: { value: next.zoom } } as any });
+      reveal({ x: x1, y: y1, width: x2 - x1, height: y2 - y1 });
     }
     if (problems.length) say('error', [...problems, ...notes].join('\n'));
     else if (notes.length) say('info', notes.join('\n'));
@@ -367,6 +424,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
       <div className="canvas-tools">
         <button onClick={addFreeFragment} disabled={!api}>＋ Fragment</button>
         <button className="secondary" onClick={() => fileInput.current?.click()} disabled={!api}>＋ Image</button>
+        {pivot && <><span className="hint">Exploring · {pivot.status}</span><button className="secondary" onClick={stopPivot}>Stop</button></>}
         <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={e => { const f = [...(e.target.files ?? [])]; e.target.value = ''; void importImages(f); }} />
         {captureUrl && <button className="secondary" onClick={() => { setInboxOpen(o => !o); void refreshInbox(); }} aria-pressed={inboxOpen}>Inbox{inbox.items.length > 0 ? ` (${inbox.items.length})` : ''}</button>}
         <span className="hint">Double-click a card or connection to edit · paste or drop text, links and images</span>
@@ -385,7 +443,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
         <ImageCardEditor key={editing.id} data={editing.data} onCaption={c => editImage(editing.id, c)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} />
       )}
       {editing?.kind === 'fragment' && (
-        <FragmentEditor key={editing.id} fragment={editing.fragment} onChange={f => editFragment(editing.id, f)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} />
+        <FragmentEditor key={editing.id} fragment={editing.fragment} onChange={f => editFragment(editing.id, f)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} onPivot={() => startPivot(editing.id)} pivoting={!!pivot} />
       )}
       {editing?.kind === 'cluster' && (
         <ClusterEditor key={editing.id} title={editing.title} lens={editing.lens} onChange={t => editCluster(editing.id, t)} onAddFragment={() => addToCluster(editing.id)} onClose={() => setEditing(null)} />

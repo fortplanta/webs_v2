@@ -150,3 +150,51 @@ Rules:
 - "tags": 2-4 lowercase words. Omit for quotes.
 - Output JSON Lines only. Each object on its own line.`;
 }
+
+// ── pivot ─────────────────────────────────────────────────────────────────────────────────────────
+
+export const PIVOT_OVERVIEW_SYSTEM_PROMPT = `You name a new collection of knowledge-base passages that explores a different angle on an existing card.
+
+${JSON_ONLY} Your response must start with { and end with }.`;
+
+function cardBlock(card: { title: string; body: string }): string {
+  return `Source card: "${card.title}"\n${clip(card.body, 500)}`;
+}
+
+export function buildPivotOverviewMessage(card: { title: string; body: string }, collection: Collection): string {
+  return `${cardBlock(card)}
+
+New collection, reached through the route "${collection.label}":
+
+${renderCollections([collection])}
+
+Return ONLY valid JSON in this exact shape:
+
+{ "title": "2-4 words naming the angle these passages open up", "edge": "verb phrase linking the source card to this collection" }
+
+Rules:
+- The title names what the passages show that the source card does not.
+- The edge is a verb phrase, not a noun: "led to", "put to use in", "contested by".
+- Use only the passages above. Return raw JSON only. Start with { and end with }.`;
+}
+
+export function buildPivotFragmentsMessage(card: { title: string; body: string }, title: string, collection: Collection): string {
+  const ids = passageIds([collection]);
+  return `${cardBlock(card)}
+
+New collection: "${title}", exploring a different angle on that card.
+
+${renderCollections([collection])}
+
+Write exactly one card for every passage, in order (${ids.flat().join(', ')}), one JSON object per line:
+
+{"passage": "P1", "type": "person | concept | thesis | source | event | era | domain | quote", "title": "card title (2-5 words, lowercase)", "body": "2-3 sentences", "bridge": "one sentence on how this connects to the source card", "tags": ["tag1", "tag2"]}
+
+Rules:
+- "passage" is the id of the passage the card is based on. Use each id once.
+- "body" restates what that passage says. Do not add facts, names, dates or numbers that are not in the passage.
+- "bridge" names the idea that connects this card to the source card "${card.title}". One sentence.
+- Choose "type" by what the card actually is: person, concept, thesis (a contested claim), source (a document or reference), event, era, domain, or quote (verbatim text from the passage only).
+- "tags": 2-4 lowercase words. Omit for quotes.
+- Output JSON Lines only. Each object on its own line.`;
+}
