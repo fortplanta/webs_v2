@@ -16,7 +16,8 @@ export function defaultSettings(): Settings {
   const idleMs = Number(process.env.WEBS_LLM_IDLE_TIMEOUT_MS);
   return {
     library: { dir: process.env.WEBS_LIBRARY_DIR?.trim() || '', disabled: [] },
-    ai: { enabled: false, kind: 'openai', baseUrl: AI_PRESETS.openai.baseUrl, model: '', apiKey: '', topUp: false },
+    // On by default, with the free local Ollama: when your notes and libraries have nothing (or too little), it answers.
+    ai: { enabled: true, kind: 'ollama', baseUrl: '', model: '', apiKey: '', topUp: true },
     ollama: {
       baseUrl: process.env.WEBS_LLM_BASE_URL?.trim() || 'http://localhost:11434',
       model: process.env.WEBS_LLM_MODEL?.trim() || 'qwen3:8b',
@@ -102,13 +103,13 @@ export function validatePatch(patch: SettingsPatch, strategies: string[]): Valid
     if (patch.ai.enabled !== undefined) a.enabled = !!patch.ai.enabled;
     if (patch.ai.topUp !== undefined) a.topUp = !!patch.ai.topUp;
     if (patch.ai.kind !== undefined) {
-      if (patch.ai.kind === 'openai' || patch.ai.kind === 'anthropic') a.kind = patch.ai.kind;
-      else errors['ai.kind'] = 'Choose OpenAI-compatible or Anthropic.';
+      if (patch.ai.kind === 'ollama' || patch.ai.kind === 'openai' || patch.ai.kind === 'anthropic') a.kind = patch.ai.kind;
+      else errors['ai.kind'] = 'Choose Ollama, OpenAI-compatible or Anthropic.';
     }
     if (patch.ai.baseUrl !== undefined) {
       const raw = String(patch.ai.baseUrl).trim().replace(/\/+$/, '');
-      let ok = false;
-      try { const u = new URL(raw); ok = u.protocol === 'http:' || u.protocol === 'https:'; } catch { /* invalid */ }
+      let ok = raw === ''; // empty = not used (Ollama uses its own server setting)
+      if (!ok) { try { const u = new URL(raw); ok = u.protocol === 'http:' || u.protocol === 'https:'; } catch { /* invalid */ } }
       if (ok) a.baseUrl = raw; else errors['ai.baseUrl'] = 'Enter a full http:// or https:// URL.';
     }
     if (patch.ai.model !== undefined) a.model = String(patch.ai.model).trim();

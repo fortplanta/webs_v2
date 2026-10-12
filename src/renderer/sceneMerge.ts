@@ -69,7 +69,11 @@ export function mergeScene(prev: readonly El[], next: El[], applied: Map<string,
   const ours = new Set(next.map(e => e.id));
   for (const e of prev) if (!ours.has(e.id) && !isGenerated(e.id)) merged.push(e);
 
-  return { elements: merged, signatures };
+  // Boxes the user (or the layout) has moved keep their place, so generated lines must be re-aimed at where the boxes
+  // actually are rather than where this build would have put them. Lines the user drew are left alone.
+  const routed = routeArrows(merged);
+  const aim = (e: El) => isGenerated(e.id) || (e.type === 'text' && !!e.containerId && isGenerated(e.containerId));
+  return { elements: merged.map((e, i) => (aim(e) && e.type !== 'rectangle' ? routed[i] : e)), signatures };
 }
 
 function isGenerated(id: string): boolean {

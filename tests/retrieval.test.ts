@@ -170,7 +170,7 @@ describe('lensed strategy', () => {
   const retriever: Retriever = { retrieve: async q => retrieve(index, q, cfg({ clusterCount: 3, fragmentsPerCluster: 2 })) };
   const collect = async (llm: LlmService) => {
     const out: WebEvent[] = [];
-    for await (const e of runStrategy('widget', { strategy: 'lensed', signal: new AbortController().signal, retriever, llm })) out.push(e);
+    for await (const e of runStrategy('widget', { strategy: 'lensed', signal: new AbortController().signal, retriever, llm, ai: null })) out.push(e);
     return out;
   };
   // The model's cards are built from the real selection, so what P1/P2 mean is whatever retrieval chose.
@@ -187,7 +187,7 @@ describe('lensed strategy', () => {
   it('shows retrieval results instantly — skeleton and excerpt cards — before any model call', async () => {
     let llmCalled = false;
     const llm: LlmService = { call: async () => { llmCalled = true; throw new Error('should not matter'); }, async *stream() { /* none */ } };
-    const gen = runStrategy('widget', { strategy: 'lensed', signal: new AbortController().signal, retriever, llm });
+    const gen = runStrategy('widget', { strategy: 'lensed', signal: new AbortController().signal, retriever, llm, ai: null });
     const seen: WebEvent[] = [];
     // take events until the first status ("Outlining…"): everything before it must exist without the model
     for await (const e of gen) { seen.push(e); if (e.type === 'status') break; }
@@ -242,7 +242,7 @@ describe('lensed strategy', () => {
   it('reports kb-empty before doing anything else when nothing matches', async () => {
     const none: Retriever = { retrieve: async q => retrieve(index, 'zeppelin', cfg()) };
     const evs: WebEvent[] = [];
-    for await (const e of runStrategy('zeppelin', { strategy: 'lensed', signal: new AbortController().signal, retriever: none, llm: goodLlm() })) evs.push(e);
+    for await (const e of runStrategy('zeppelin', { strategy: 'lensed', signal: new AbortController().signal, retriever: none, llm: goodLlm(), ai: null })) evs.push(e);
     expect(evs).toEqual([{ type: 'error', code: 'kb-empty', message: expect.any(String) }]);
   });
 });

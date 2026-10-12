@@ -46,6 +46,27 @@ describe('mergeScene', () => {
   });
 });
 
+describe('mergeScene re-aims generated lines at boxes that stayed put', () => {
+  const box = (id: string, x: number, y: number) => ({ id, type: 'rectangle', x, y, width: 100, height: 40 });
+  const edge = (x: number, w: number, extra: any = {}) => ({ id: 'edge-0', type: 'arrow', x, y: 20, width: w, height: 0, points: [[0, 0], [w, 0]], startBinding: { elementId: 'cluster-0' }, endBinding: { elementId: 'cluster-1' }, ...extra });
+
+  it('a regenerated edge follows the boxes where they are now, not where the new build put them', () => {
+    // the user's canvas: cluster-1 was moved far away; the new build still places it at x=300
+    const prev = [box('cluster-0', 0, 0), box('cluster-1', 800, 0), edge(100, 700)];
+    const next = [box('cluster-0', 0, 0), box('cluster-1', 300, 0), edge(100, 200, { version: 2 })];
+    const { elements } = mergeScene(prev, next, new Map([['cluster-0', signature(next[0])], ['cluster-1', signature(next[1])]]));
+    const e = elements.find(x => x.id === 'edge-0')!;
+    expect(elements.find(x => x.id === 'cluster-1')!.x).toBe(800);   // the user's position kept…
+    expect(e.x + e.points[1][0]).toBe(800);                          // …and the line lands on it
+  });
+  it('leaves a line the user drew alone', () => {
+    const mine = { ...edge(100, 50), id: 'my-arrow' };
+    const prev = [box('cluster-0', 0, 0), box('cluster-1', 800, 0), mine];
+    const { elements } = mergeScene(prev, [], new Map());
+    expect(elements.find(x => x.id === 'my-arrow')).toBe(mine);
+  });
+});
+
 describe('routeArrows', () => {
   const head = (i: number) => ({ id: `cluster-${i}`, type: 'rectangle', x: i * 400, y: 300, width: 280, height: 48, customData: { kind: 'cluster', index: i } });
   const arrow = (id: string, from: number, to: number) => ({ id, type: 'arrow', x: 0, y: 0, startBinding: { elementId: `cluster-${from}` }, endBinding: { elementId: `cluster-${to}` } });

@@ -99,7 +99,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
     const p = AI_PRESETS[id];
     if (!p) return;
     setSaved(false); setAiTest(null);
-    setDraft({ ...draft!, ai: { ...draft!.ai, kind: p.kind, baseUrl: p.baseUrl, model: draft!.ai.model || p.model } });
+    setDraft({ ...draft!, ai: { ...draft!.ai, kind: p.kind, baseUrl: p.baseUrl, model: p.kind === 'ollama' ? '' : draft!.ai.model || p.model } });
   }
 
   async function testCapture() {
@@ -218,32 +218,38 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
           </fieldset>
 
           <fieldset>
-            <legend>AI provider</legend>
+            <legend>AI answers</legend>
             <label className="check">
               <input type="checkbox" checked={draft.ai.enabled} onChange={e => set('ai', 'enabled', e.target.checked)} />
-              Answer from my AI provider when my notes have nothing on a topic
+              Answer with AI when my notes and libraries have nothing on a topic
             </label>
-            <div className="hint">Your notes always come first. Anything the AI writes is marked <strong>✦ AI</strong> and drawn with a dashed outline, so you can tell it apart from what came from your notes. Only the topic is sent to the provider — never your notes.</div>
+            <div className="hint">Your notes and libraries always come first. Anything the AI writes is marked <strong>✦ AI</strong> and drawn with a dashed outline, so you can tell it apart from what came from your notes. {draft.ai.kind === 'ollama' ? 'With Ollama everything stays on your machine.' : 'Only the topic is sent to the provider — never your notes.'}</div>
             <label>
               Provider
-              <select value={Object.entries(AI_PRESETS).find(([, p]) => p.baseUrl === draft.ai.baseUrl && p.kind === draft.ai.kind)?.[0] ?? 'custom'} onChange={e => pickPreset(e.target.value)}>
+              <select value={Object.entries(AI_PRESETS).find(([, p]) => p.kind === draft.ai.kind && (p.kind === 'ollama' || p.baseUrl === draft.ai.baseUrl))?.[0] ?? 'custom'} onChange={e => pickPreset(e.target.value)}>
                 {Object.entries(AI_PRESETS).map(([id, p]) => <option key={id} value={id}>{p.label}</option>)}
                 <option value="custom">Custom endpoint…</option>
               </select>
             </label>
-            <label>
-              API URL <span className="meta">{draft.ai.kind === 'anthropic' ? 'Anthropic Messages API' : 'any OpenAI-compatible chat endpoint'}</span>
-              <input value={draft.ai.baseUrl} onChange={e => { setAiTest(null); set('ai', 'baseUrl', e.target.value); }} spellCheck={false} />
-            </label>
-            {err('ai.baseUrl')}
-            <label>
-              Model
-              <input value={draft.ai.model} onChange={e => { setAiTest(null); set('ai', 'model', e.target.value); }} placeholder="e.g. gpt-4o-mini" spellCheck={false} />
-            </label>
-            <label>
-              API key <span className="meta">{bundle.aiKeySet ? 'saved in your keychain — type to replace it' : 'stored in your keychain, never shown again'}</span>
-              <input type="password" value={draft.ai.apiKey} onChange={e => { setAiTest(null); set('ai', 'apiKey', e.target.value); }} placeholder={bundle.aiKeySet ? '••••••••••••' : ''} autoComplete="off" spellCheck={false} />
-            </label>
+            {draft.ai.kind === 'ollama' ? (
+              <div className="hint">Uses the Ollama server and model chosen above ({draft.ollama.model}) — free, open source, and no API key needed.</div>
+            ) : (
+              <>
+                <label>
+                  API URL <span className="meta">{draft.ai.kind === 'anthropic' ? 'Anthropic Messages API' : 'any OpenAI-compatible chat endpoint'}</span>
+                  <input value={draft.ai.baseUrl} onChange={e => { setAiTest(null); set('ai', 'baseUrl', e.target.value); }} spellCheck={false} />
+                </label>
+                {err('ai.baseUrl')}
+                <label>
+                  Model
+                  <input value={draft.ai.model} onChange={e => { setAiTest(null); set('ai', 'model', e.target.value); }} placeholder="e.g. gpt-4o-mini" spellCheck={false} />
+                </label>
+                <label>
+                  API key <span className="meta">{bundle.aiKeySet ? 'saved in your keychain — type to replace it' : 'stored in your keychain, never shown again'}</span>
+                  <input type="password" value={draft.ai.apiKey} onChange={e => { setAiTest(null); set('ai', 'apiKey', e.target.value); }} placeholder={bundle.aiKeySet ? '••••••••••••' : ''} autoComplete="off" spellCheck={false} />
+                </label>
+              </>
+            )}
             <label className="check">
               <input type="checkbox" checked={draft.ai.topUp} onChange={e => set('ai', 'topUp', e.target.checked)} />
               Also fill gaps: add AI collections when my notes find fewer than {draft.generation.clusterCount}
@@ -252,7 +258,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
               {aiTest === 'checking' && 'Checking…'}
               {aiTest && aiTest !== 'checking' && aiTest.message}
               {' '}<button type="button" className="link" onClick={saveAndTestAi} disabled={aiTest === 'checking'}>{dirty ? 'Save & test' : 'Test connection'}</button>
-              {bundle.aiKeySet && <> · <button type="button" className="link" onClick={removeAiKey}>Remove saved key</button></>}
+              {bundle.aiKeySet && draft.ai.kind !== 'ollama' && <> · <button type="button" className="link" onClick={removeAiKey}>Remove saved key</button></>}
             </div>
           </fieldset>
 

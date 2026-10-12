@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WebEvent } from '../src/backend/events';
 import { WebsError } from '../src/backend/errors';
-import type { LlmService } from '../src/backend/llm';
+import { ollamaLlm, type LlmService } from '../src/backend/llm';
 import { aiContext, aiReady, deltaText, providerLlm, testProvider } from '../src/backend/provider';
 import { getSettings, publicSettings, setSettingsOverrides, validatePatch } from '../src/backend/settings';
 import { parseAiOutline } from '../src/backend/strategies/ai';
@@ -46,11 +46,28 @@ describe('AI provider settings', () => {
     expect(Object.keys(r.errors).sort()).toEqual(['ai.baseUrl', 'ai.kind']);
     expect(r.value.ai).toEqual({ enabled: true, model: 'm' });
   });
-  it('is ready only when enabled, with a model and a key (or a local server)', () => {
-    expect(aiReady(getSettings().ai)).toBe(false);
+  it('defaults to the free, local, open-source Ollama — on, with gap-filling on', () => {
+    const ai = getSettings().ai;
+    expect(ai).toMatchObject({ enabled: true, kind: 'ollama', topUp: true, apiKey: '' });
+    expect(aiReady(ai)).toBe(true);
+    const ctx = aiContext()!;
+    expect(ctx.topUp).toBe(true);
+    expect(ctx.llm).toBe(ollamaLlm);
+    expect(ctx.model).toBe(getSettings().ollama.model);   // cards are labelled with the Ollama model that wrote them
+    setSettingsOverrides({ ollama: { model: 'llama3.1:8b' } });
+    expect(aiContext()!.model).toBe('llama3.1:8b');
+    setSettingsOverrides({ ai: { enabled: false } });
+    expect(aiContext()).toBeNull();
+  });
+  it('lets Ollama have no URL, and rejects unknown kinds', () => {
+    expect(validatePatch({ ai: { kind: 'ollama', baseUrl: '' } }, []).errors).toEqual({});
+    expect(validatePatch({ ai: { kind: 'gpt5' as any } }, []).errors['ai.kind']).toBeDefined();
+  });
+  it('a hosted provider is ready only with a model and a key (or a local server)', () => {
     useAi(); expect(aiReady()).toBe(true); expect(aiContext()).toMatchObject({ model: 'test-model', topUp: false });
     useAi({ apiKey: '' }); expect(aiReady()).toBe(false);
     useAi({ apiKey: '', baseUrl: 'http://localhost:1234/v1' }); expect(aiReady()).toBe(true);
+    useAi({ model: '' }); expect(aiReady()).toBe(false);
     useAi({ enabled: false }); expect(aiContext()).toBeNull();
   });
 });

@@ -3,7 +3,7 @@
 // Runs in the main process; the API key never reaches the renderer. Same seam as the Ollama client: an LlmService.
 
 import { WebsError } from './errors';
-import type { LlmOptions, LlmService } from './llm';
+import { callOllama, ollamaLlm, type LlmOptions, type LlmService } from './llm';
 import { getSettings } from './settings';
 import type { AiSettings, AiTestResult } from '../types/settings';
 
@@ -14,11 +14,15 @@ const isLocal = (url: string) => /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:
 
 /** Whether the provider can be used right now: switched on, a model chosen, and a key (unless it's a local server). */
 export function aiReady(ai: AiSettings = getSettings().ai): boolean {
-  return ai.enabled && !!ai.model && (!!ai.apiKey || isLocal(ai.baseUrl));
+  if (!ai.enabled) return false;
+  if (ai.kind === 'ollama') return true; // free and local: nothing to configure; if Ollama isn't running the request says so
+  return !!ai.model && (!!ai.apiKey || isLocal(ai.baseUrl));
 }
 
+/** The model name shown on AI cards. */
 export function aiModelName(): string {
-  return getSettings().ai.model;
+  const s = getSettings();
+  return s.ai.kind === 'ollama' ? s.ollama.model : s.ai.model;
 }
 
 function endpoint(ai: AiSettings): string {
@@ -115,12 +119,21 @@ export const providerLlm: LlmService = { stream: streamProvider, call: callProvi
 
 /** The provider as an LlmService if it's usable, else null. */
 export function configuredProvider(): LlmService | null {
-  return aiReady() ? providerLlm : null;
+  if (!aiReady()) return null;
+  return getSettings().ai.kind === 'ollama' ? ollamaLlm : providerLlm;
 }
 
 /** Settings → "Test": one tiny request with the saved (or just-typed) settings. */
 export async function testProvider(): Promise<AiTestResult> {
   const ai = getSettings().ai;
+  if (ai.kind === 'ollama') {
+    try {
+      const reply = await callOllama({ system: 'Reply with the single word OK.', user: 'ping', maxTokens: 8, temperature: 0 }, AbortSignal.timeout(60_000));
+      return { ok: true, message: `Connected · ${aiModelName()} replied${reply.trim() ? ` “${reply.trim().slice(0, 20)}”` : ''}.` };
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : String(err) };
+    }
+  }
   if (!ai.model) return { ok: false, message: 'Enter a model name first.' };
   if (!ai.apiKey && !isLocal(ai.baseUrl)) return { ok: false, message: 'Enter an API key first.' };
   try {
@@ -133,6 +146,6 @@ export async function testProvider(): Promise<AiTestResult> {
 
 /** What a strategy needs to use the provider, or null if it isn't set up. */
 export function aiContext(): { llm: LlmService; model: string; topUp: boolean } | null {
-  const ai = getSettings().ai;
-  return aiReady(ai) ? { llm: providerLlm, model: ai.model, topUp: ai.topUp } : null;
+  const llm = configuredProvider();
+  return llm ? { llm, model: aiModelName(), topUp: getSettings().ai.topUp } : null;
 }

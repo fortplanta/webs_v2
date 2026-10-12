@@ -1,6 +1,8 @@
-export type AiKind = 'openai' | 'anthropic';
+export type AiKind = 'ollama' | 'openai' | 'anthropic';
 
 export const AI_PRESETS: Record<string, { label: string; kind: AiKind; baseUrl: string; model: string }> = {
+  // Free and open source: runs on your own Ollama, using the server and model chosen under "Ollama" above.
+  ollama: { label: 'Ollama — local, open source (free)', kind: 'ollama', baseUrl: '', model: '' },
   openai: { label: 'OpenAI', kind: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
   anthropic: { label: 'Anthropic (Claude)', kind: 'anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-haiku-4-5' },
   openrouter: { label: 'OpenRouter', kind: 'openai', baseUrl: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' },
@@ -11,7 +13,7 @@ export const AI_PRESETS: Record<string, { label: string; kind: AiKind; baseUrl: 
 /** The user's own AI provider, used only when the knowledge base has nothing (see strategies/ai.ts). */
 export interface AiSettings {
   enabled: boolean;
-  /** 'openai' = any OpenAI-compatible chat endpoint (OpenAI, OpenRouter, Groq, LM Studio, …); 'anthropic' = Claude. */
+  /** 'ollama' = your local Ollama (the default: free, open source; uses the Ollama server and model settings); 'openai' = any OpenAI-compatible chat endpoint (OpenAI, OpenRouter, Groq, LM Studio, …); 'anthropic' = Claude. */
   kind: AiKind;
   baseUrl: string;
   model: string;

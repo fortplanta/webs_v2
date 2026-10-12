@@ -71,11 +71,13 @@ npm run library:import -- path/to/dump.xml.bz2 --name enwiki --label "English Wi
 It streams the dump (any size) through `bzcat`, drops redirects, disambiguation pages, stubs, templates, tables and
 reference sections, and writes `<name>.db`. Simple English takes ~5 minutes and ~0.4 GB.
 
-## Bring your own AI (optional)
+## AI answers (on by default, with Ollama)
 
-Your notes and libraries always come first. If they have nothing on a topic, Webs can ask an AI provider of your choosing to
-write the web from its own knowledge instead — set it up in **Settings → AI provider**: any OpenAI-compatible
-endpoint (OpenAI, OpenRouter, Groq, LM Studio, …) or Anthropic, with your own model name and API key. The key is
+Your notes and libraries always come first. When they have nothing on a topic — or fewer collections than asked
+for — Webs asks an AI to fill in. **By default that is your own local Ollama** (free, open source, nothing leaves
+your machine; it uses the Ollama server and model from Settings), and it is switched on out of the box.
+Settings → AI answers lets you switch it off, or point it at a hosted provider instead (any OpenAI-compatible
+endpoint — OpenAI, OpenRouter, Groq, LM Studio — or Anthropic) with your own model name and API key. The key is
 sealed with the macOS keychain and never shown again.
 
 - **It runs alongside, never in front.** Collections and cards from your notes appear instantly as before; the
@@ -83,11 +85,11 @@ sealed with the macOS keychain and never shown again.
 - **You can always tell the difference.** Anything the AI wrote has a dashed outline, a **✦** on its collection
   headers, and a footer "✦ AI · model — not from your notes". Cards from your notes show their source file.
   The editors say so too, and the canvas shows a small legend.
-- **Fill gaps** (off by default): when your notes find *some* collections but fewer than requested, the AI adds the
-  rest, in parallel; if it fails you keep your notes' web and see a warning.
-- **Privacy:** only the topic (and, when filling gaps, the titles of the collections you already have) is sent
-  to the provider — never your notes. The AI is not used when your notes cover the topic, and not at all unless
-  you turn it on. It applies to the default "lensed" strategy.
+- **Fill gaps** (on by default): when your notes find *some* collections but fewer than requested (four by default),
+  the AI adds the rest, in parallel; if it fails you keep your notes' web and see a warning.
+- **Privacy:** with Ollama nothing leaves your machine. With a hosted provider only the topic (and, when filling
+  gaps, the titles of the collections you already have) is sent — never your notes. Not used when your notes cover
+  the topic. It applies to the default "lensed" strategy.
 
 ## Updates
 
