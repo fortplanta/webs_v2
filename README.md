@@ -54,6 +54,24 @@ npm run dist       # also the .dmg and .zip → release/
 The app is **ad-hoc signed, not notarized**. One built on your own Mac runs normally; if you move the
 download to another Mac, right-click → *Open* the first time.
 
+## Bring your own AI (optional)
+
+Your notes always come first. If they have nothing on a topic, Webs can ask an AI provider of your choosing to
+write the web from its own knowledge instead — set it up in **Settings → AI provider**: any OpenAI-compatible
+endpoint (OpenAI, OpenRouter, Groq, LM Studio, …) or Anthropic, with your own model name and API key. The key is
+sealed with the macOS keychain and never shown again.
+
+- **It runs alongside, never in front.** Collections and cards from your notes appear instantly as before; the
+  AI's outline and cards stream in separately.
+- **You can always tell the difference.** Anything the AI wrote has a dashed outline, a **✦** on its collection
+  headers, and a footer "✦ AI · model — not from your notes". Cards from your notes show their source file.
+  The editors say so too, and the canvas shows a small legend.
+- **Fill gaps** (off by default): when your notes find *some* collections but fewer than requested, the AI adds the
+  rest, in parallel; if it fails you keep your notes' web and see a warning.
+- **Privacy:** only the topic (and, when filling gaps, the titles of the collections you already have) is sent
+  to the provider — never your notes. The AI is not used when your notes cover the topic, and not at all unless
+  you turn it on. It applies to the default "lensed" strategy.
+
 ## Updates
 
 Installed copies of Webs check GitHub Releases on launch (and every few hours) and show a notice when a newer
@@ -80,8 +98,8 @@ Override with `WEBS_DB` (database file) and `WEBS_KB_DIR` (KB folder). The KB fo
 in Settings. A library saved by earlier builds (in `~/Library/Application Support/webs-v1a`) is copied
 across once on first launch; the original is left untouched.
 
-The app's only outbound calls are to your Ollama, your capture service (if you set one), and GitHub (the update
-check); fonts are bundled.
+The app's only outbound calls are to your Ollama, your capture service and AI provider (if you set them up), and
+GitHub (the update check); fonts are bundled.
 
 ## How generation works
 

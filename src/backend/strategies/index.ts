@@ -8,7 +8,9 @@ import type { WebConfig } from '../config';
 import { getSettings } from '../settings';
 import { fileKb, type KbService } from '../kb';
 import { ollamaLlm, type LlmService } from '../llm';
+import { aiContext } from '../provider';
 import { kbRetriever, type Retriever } from '../retrieval/service';
+import type { AiContext } from './ai';
 import { lensed } from './lensed';
 import { progressive } from './progressive';
 import type { Strategy } from './types';
@@ -22,6 +24,8 @@ export interface RunOptions {
   kb?: KbService;
   retriever?: Retriever;
   llm?: LlmService;
+  /** Override the AI provider (tests); `null` = none. */
+  ai?: AiContext | null;
 }
 
 /** Runs a strategy and guarantees the stream ends with exactly one 'done' or 'error' event (none if cancelled). */
@@ -41,6 +45,7 @@ export async function* runStrategy(query: string, opts: RunOptions): AsyncGenera
       kb: opts.kb ?? fileKb,
       retriever: opts.retriever ?? kbRetriever,
       llm: opts.llm ?? ollamaLlm,
+      ai: opts.ai !== undefined ? opts.ai : aiContext(),
     });
     yield { type: 'done' };
   } catch (err) {

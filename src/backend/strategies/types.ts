@@ -3,6 +3,7 @@ import type { WebEvent } from '../events';
 import type { KbService } from '../kb';
 import type { LlmService } from '../llm';
 import type { Retriever } from '../retrieval/service';
+import type { AiContext } from './ai';
 
 export interface StrategyContext {
   query: string;
@@ -11,6 +12,8 @@ export interface StrategyContext {
   kb: KbService;
   retriever: Retriever;
   llm: LlmService;
+  /** The user's own AI provider, when set up. */
+  ai: AiContext | null;
 }
 
 /**

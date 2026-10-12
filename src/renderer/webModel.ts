@@ -17,18 +17,38 @@ export function reduce(m: WebModel, ev: WebEvent): WebModel {
       return { ...m, kb: ev.passages };
     case 'overview': {
       // A later overview (e.g. the model's titles after an instant retrieval skeleton) updates the
-      // collections in place; it must not wipe cards that already arrived.
+      // collections in place; it must not wipe cards that already arrived — nor collections the AI added.
+      const kept = m.clusters.slice(ev.clusters.length).filter(c => c.origin === 'ai');
       return {
         ...m,
         context: ev.context || m.context,
-        edges: ev.edges,
-        clusters: ev.clusters.map((c, i) => {
-          const prev = m.clusters[i];
-          const slots = prev && prev.slots.length === c.slots ? prev.slots : Array.from({ length: c.slots }, () => null);
-          return { title: c.title, lens: c.lens ?? prev?.lens, slots };
-        }),
+        edges: [...ev.edges, ...m.edges.filter(e => Math.max(e.source, e.target) >= ev.clusters.length)],
+        clusters: [
+          ...ev.clusters.map((c, i) => {
+            const prev = m.clusters[i];
+            const slots = prev && prev.slots.length === c.slots ? prev.slots : Array.from({ length: c.slots }, () => null);
+            return { title: c.title, lens: c.lens ?? prev?.lens, slots };
+          }),
+          ...kept,
+        ],
       };
     }
+    case 'ai-outline': {
+      const clusters = m.clusters.slice(0, ev.start);
+      ev.clusters.forEach((c, i) => {
+        const prev = m.clusters[ev.start + i];
+        clusters.push({ title: c.title, origin: 'ai', slots: prev?.slots.length === c.slots ? prev.slots : Array.from({ length: c.slots }, () => null) });
+      });
+      return {
+        ...m,
+        context: m.context || ev.context || null,
+        aiModel: ev.model,
+        clusters,
+        edges: [...m.edges.filter(e => Math.max(e.source, e.target) < ev.start), ...ev.edges],
+      };
+    }
+    case 'warning':
+      return { ...m, warning: ev.message };
     case 'fragment': {
       const clusters = m.clusters.map((c, i) =>
         i === ev.cluster ? { ...c, slots: c.slots.map((s, j) => (j === ev.slot ? ev.fragment : s)) } : c,

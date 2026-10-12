@@ -2,6 +2,7 @@
 
 export type WebsErrorCode =
   | 'kb-empty'
+  | 'ai-error'
   | 'ollama-offline'
   | 'ollama-timeout'
   | 'ollama-error'

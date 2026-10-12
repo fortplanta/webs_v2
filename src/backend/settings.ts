@@ -4,11 +4,18 @@
 
 import path from 'node:path';
 import { defaultWebConfig } from './config';
-import type { Settings, SettingsErrors, SettingsPatch } from '../types/settings';
+import { AI_PRESETS, type Settings, type SettingsErrors, type SettingsPatch } from '../types/settings';
+
+/** Seals/unseals the API key at rest. The main process installs one backed by the OS keychain (Electron safeStorage). */
+export interface SecretCodec { encrypt(plain: string): string; decrypt(stored: string): string }
+let codec: SecretCodec = { encrypt: s => `plain:${s}`, decrypt: s => (s.startsWith('plain:') ? s.slice(6) : s) };
+export function setSecretCodec(next: SecretCodec): void { codec = next; }
+export const sealSecret = (plain: string): string => (plain ? codec.encrypt(plain) : '');
 
 export function defaultSettings(): Settings {
   const idleMs = Number(process.env.WEBS_LLM_IDLE_TIMEOUT_MS);
   return {
+    ai: { enabled: false, kind: 'openai', baseUrl: AI_PRESETS.openai.baseUrl, model: '', apiKey: '', topUp: false },
     ollama: {
       baseUrl: process.env.WEBS_LLM_BASE_URL?.trim() || 'http://localhost:11434',
       model: process.env.WEBS_LLM_MODEL?.trim() || 'qwen3:8b',
@@ -42,6 +49,7 @@ export function getSettingsOverrides(): SettingsPatch {
 
 export function mergeSettings(base: Settings, patch: SettingsPatch): Settings {
   return {
+    ai: { ...base.ai, ...patch.ai },
     ollama: { ...base.ollama, ...patch.ollama },
     kb: { ...base.kb, ...patch.kb },
     generation: { ...base.generation, ...patch.generation },
@@ -50,11 +58,18 @@ export function mergeSettings(base: Settings, patch: SettingsPatch): Settings {
 }
 
 export function mergePatches(a: SettingsPatch, b: SettingsPatch): SettingsPatch {
-  return { ollama: { ...a.ollama, ...b.ollama }, kb: { ...a.kb, ...b.kb }, generation: { ...a.generation, ...b.generation }, capture: { ...a.capture, ...b.capture } };
+  return { ai: { ...a.ai, ...b.ai }, ollama: { ...a.ollama, ...b.ollama }, kb: { ...a.kb, ...b.kb }, generation: { ...a.generation, ...b.generation }, capture: { ...a.capture, ...b.capture } };
 }
 
+/** The effective settings, with the API key unsealed. Backend use only: the renderer gets `publicSettings`. */
 export function getSettings(): Settings {
-  return mergeSettings(defaultSettings(), overrides);
+  const s = mergeSettings(defaultSettings(), overrides);
+  return s.ai.apiKey ? { ...s, ai: { ...s.ai, apiKey: codec.decrypt(s.ai.apiKey) } } : s;
+}
+
+/** Settings as the renderer may see them: no API key. */
+export function publicSettings(s: Settings): Settings {
+  return { ...s, ai: { ...s.ai, apiKey: '' } };
 }
 
 export interface Validated {
@@ -69,6 +84,26 @@ const intIn = (v: unknown, min: number, max: number): v is number =>
 export function validatePatch(patch: SettingsPatch, strategies: string[]): Validated {
   const value: SettingsPatch = {};
   const errors: SettingsErrors = {};
+
+  if (patch.ai) {
+    const a: NonNullable<SettingsPatch['ai']> = {};
+    if (patch.ai.enabled !== undefined) a.enabled = !!patch.ai.enabled;
+    if (patch.ai.topUp !== undefined) a.topUp = !!patch.ai.topUp;
+    if (patch.ai.kind !== undefined) {
+      if (patch.ai.kind === 'openai' || patch.ai.kind === 'anthropic') a.kind = patch.ai.kind;
+      else errors['ai.kind'] = 'Choose OpenAI-compatible or Anthropic.';
+    }
+    if (patch.ai.baseUrl !== undefined) {
+      const raw = String(patch.ai.baseUrl).trim().replace(/\/+$/, '');
+      let ok = false;
+      try { const u = new URL(raw); ok = u.protocol === 'http:' || u.protocol === 'https:'; } catch { /* invalid */ }
+      if (ok) a.baseUrl = raw; else errors['ai.baseUrl'] = 'Enter a full http:// or https:// URL.';
+    }
+    if (patch.ai.model !== undefined) a.model = String(patch.ai.model).trim();
+    // A new key is sealed here so it is never written to disk (or kept in memory settings) in the clear.
+    if (patch.ai.apiKey !== undefined && String(patch.ai.apiKey).trim()) a.apiKey = sealSecret(String(patch.ai.apiKey).trim());
+    value.ai = a;
+  }
 
   if (patch.ollama) {
     const o: NonNullable<SettingsPatch['ollama']> = {};

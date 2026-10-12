@@ -5,7 +5,7 @@
 // collection a header on a wider ring with its cards fanned outward. Cards hang off their header by a thin tether
 // line (which also keeps them near it); headers are joined by labelled edges.
 
-import { clip, clusterLabel, fragmentLook, FRAG_H, FRAG_W, HEADER_H, typeColors, wrap, edgeLabel } from './boxes';
+import { clip, clusterLabel, fragmentLook, FRAG_H, FRAG_W, HEADER_H, originStroke, typeColors, wrap, edgeLabel } from './boxes';
 import { fanCenters, headerRing, KB_H, KB_W, kbRing, SEED_W } from './layout/organic';
 import { leash } from './layout/leash';
 import { TETHER_KIND } from './tether';
@@ -51,8 +51,9 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
     out.push({
       type: 'rectangle', id: `cluster-${ci}`, x: h.x - FRAG_W / 2, y: h.y - HEADER_H / 2, width: FRAG_W, height: HEADER_H,
       strokeColor: '#1a1a1a', backgroundColor: 'transparent', roundness: null,
-      label: clusterLabel(cluster.title),
-      customData: { kind: 'cluster', index: ci, title: cluster.title, ...(cluster.lens ? { lens: cluster.lens } : {}) },
+      ...(originStroke(cluster.origin) ?? {}),
+      label: clusterLabel(cluster.title, cluster.origin),
+      customData: { kind: 'cluster', index: ci, title: cluster.title, ...(cluster.lens ? { lens: cluster.lens } : {}), ...(cluster.origin ? { origin: cluster.origin } : {}) },
     });
 
     const spots = fanCenters(cluster.slots.length, h, h.angle);
@@ -65,6 +66,7 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
         const look = fragmentLook(frag);
         out.push({
           ...base, strokeColor: 'transparent', backgroundColor: look.backgroundColor, fillStyle: 'solid',
+          ...(originStroke(frag.origin) ?? {}),
           label: look.label,
           customData: { kind: 'fragment', cluster: ci, slot: fi, fragment: frag },
         });

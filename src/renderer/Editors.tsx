@@ -85,6 +85,9 @@ export function FragmentEditor({ fragment, onChange, onDelete, onClose, onPivot,
       <label>How it connects <span className="meta">the bridge to the topic</span>
         <input value={fragment.bridge ?? ''} onChange={e => set({ bridge: e.target.value || undefined })} />
       </label>
+      {fragment.origin === 'ai' && (
+        <div className="hint ai-note">✦ Written by {fragment.aiModel || 'your AI provider'} from its own knowledge — not from your notes. Check it before relying on it.</div>
+      )}
       {fragment.kbSources?.length ? (
         <div className="hint">
           From {fragment.kbSources.join(', ')}{fragment.lens ? ` · route: ${fragment.lens}` : ''}
@@ -115,7 +118,9 @@ export function FragmentEditor({ fragment, onChange, onDelete, onClose, onPivot,
   );
 }
 
-export function ClusterEditor({ title, lens, onChange, onAddFragment, onClose, stick }: {
+export function ClusterEditor({ title, lens, origin, aiModel, onChange, onAddFragment, onClose, stick }: {
+  origin?: 'ai';
+  aiModel?: string;
   stick?: StickProps;
   title: string;
   lens?: string;
@@ -130,6 +135,7 @@ export function ClusterEditor({ title, lens, onChange, onAddFragment, onClose, s
       <label>Title
         <input ref={ref} value={title} onChange={e => onChange(e.target.value)} />
       </label>
+      {origin === 'ai' && <div className="hint ai-note">✦ Written by {aiModel || 'your AI provider'} from its own knowledge — not from your notes.</div>}
       {lens && <div className="hint">Found through the “{lens}” route.</div>}
       <StickRow stick={stick} />
       <div className="editor-actions">

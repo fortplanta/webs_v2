@@ -1,7 +1,7 @@
 import type { PivotEvent, PivotRequest, WebEvent } from '../backend/events';
 import type { WebModel } from './web';
 import type { CaptureTestResult, InboxResult } from './capture';
-import type { KbModuleInfo, OllamaModelsResult, SaveSettingsResult, SettingsBundle, SettingsPatch } from './settings';
+import type { AiTestResult, KbModuleInfo, OllamaModelsResult, SaveSettingsResult, SettingsBundle, SettingsPatch } from './settings';
 
 /** Excalidraw elements as stored; opaque to the backend. */
 export type SceneElements = unknown[];
@@ -75,6 +75,11 @@ export interface WebsApi {
   pickKbFolder(): Promise<string | null>;
   /** Open the saved KB folder in Finder. Resolves to an error message, or null on success. */
   revealKbFolder(): Promise<string | null>;
+
+  /** Forget the saved AI API key. */
+  clearAiKey(): Promise<SettingsBundle>;
+  /** One tiny request to the AI provider with the saved settings. */
+  testAi(): Promise<AiTestResult>;
 
   /** Pending captures from the webs-capture service (empty-handed if not configured/reachable). */
   getInbox(): Promise<InboxResult>;

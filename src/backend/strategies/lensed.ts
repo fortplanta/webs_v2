@@ -11,7 +11,7 @@
 // To change what is retrieved or how it is selected, edit src/backend/retrieval/ (config, lenses).
 
 import { WebsError } from '../errors';
-import type { GeneratedFragment, OverviewEdge } from '../events';
+import type { GeneratedFragment, OverviewEdge, WebEvent } from '../events';
 import {
   buildLensedFragmentsMessage, buildLensedOverviewMessage, LENSED_FRAGMENTS_SYSTEM_PROMPT, LENSED_OVERVIEW_SYSTEM_PROMPT, passageIds,
 } from '../prompts';
@@ -19,6 +19,8 @@ import { JsonObjectStream, normalizeFragment, parseLensedOverview } from '../par
 import { groundingScore } from '../retrieval/ground';
 import type { Collection, SelectedPassage } from '../retrieval/retrieve';
 import { jaccard, terms } from '../retrieval/text';
+import { aiWeb } from './ai';
+import { interleave } from './merge';
 import type { Strategy } from './types';
 
 const clip = (t: string, n: number) => (t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t);
@@ -61,9 +63,40 @@ export const lensed: Strategy = async function* (ctx) {
   // 1. retrieval — local, deterministic, effectively instant
   const retrieval = await ctx.retriever.retrieve(q);
   const collections = retrieval.collections;
+  const wanted = ctx.config.clusterCount;
+
+  // Nothing in the KB: the user's own AI provider answers instead (if one is set up).
   if (collections.length === 0) {
-    throw new WebsError('kb-empty', 'No knowledge-base results for that query. Add notes to the kb/ folder or try different keywords.');
+    if (!ctx.ai) {
+      throw new WebsError('kb-empty', 'No knowledge-base results for that query. Add notes to the kb/ folder, try different keywords, or set up an AI provider in Settings to answer from its own knowledge.');
+    }
+    yield* aiWeb({ query: q, signal: ctx.signal, ai: ctx.ai, start: 0, count: wanted, perCollection: ctx.config.fragmentsPerCluster });
+    return;
   }
+
+  // The KB found some, but fewer collections than asked for: optionally fill the gap with the AI, running
+  // alongside the KB web so neither waits for the other.
+  const missing = wanted - collections.length;
+  if (ctx.ai?.topUp && missing > 0) {
+    const ai = ctx.ai;
+    const topUp = (async function* (): AsyncGenerator<WebEvent> {
+      try {
+        yield* aiWeb({ query: q, signal: ctx.signal, ai, start: collections.length, count: missing, perCollection: ctx.config.fragmentsPerCluster, avoid: collections.map(c => c.label) });
+      } catch (err) {
+        if (err instanceof WebsError && err.code !== 'cancelled') yield { type: 'warning', message: `Couldn't add AI collections: ${err.message}` };
+        else throw err;
+      }
+    })();
+    yield* interleave(kbWeb(ctx, q, retrieval), topUp);
+    return;
+  }
+
+  yield* kbWeb(ctx, q, retrieval);
+};
+
+/** The knowledge-base web: instant skeleton and excerpts, then the local model's cards. */
+async function* kbWeb(ctx: Parameters<Strategy>[0], q: string, retrieval: Awaited<ReturnType<Parameters<Strategy>[0]['retriever']['retrieve']>>): AsyncGenerator<WebEvent> {
+  const collections = retrieval.collections;
   const ids = passageIds(collections);
   const where = new Map<string, { cluster: number; slot: number; p: SelectedPassage }>();
   collections.forEach((c, ci) => c.passages.forEach((p, pi) => where.set(ids[ci][pi], { cluster: ci, slot: pi, p })));
@@ -125,4 +158,4 @@ export const lensed: Strategy = async function* (ctx) {
     }
     throw err;
   }
-};
+}

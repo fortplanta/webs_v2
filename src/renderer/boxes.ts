@@ -66,7 +66,9 @@ export function fragmentLook(f: GeneratedFragment): { backgroundColor: string; l
   const body = f.type === 'quote' ? f.body : clip(f.body, 130);
   const parts = [`${f.type.toUpperCase()}\n${f.title}\n\n${wrap(body, 36)}`];
   if (f.bridge) parts.push(wrap(`↳ ${clip(f.bridge, 80)}`, 36));
-  if (f.kbSources?.length) {
+  if (f.origin === 'ai') {
+    parts.push(`✦ AI${f.aiModel ? ` · ${clip(f.aiModel, 22)}` : ''} — not from your notes`);
+  } else if (f.kbSources?.length) {
     parts.push(f.grounding !== undefined && f.grounding < GROUNDING_WARN ? '⚠ goes beyond your KB' : `▤ ${baseName(f.kbSources[0])}`);
   }
   if (f.link) parts.push(`↗ ${hostLabel(f.link)}`);
@@ -76,8 +78,11 @@ export function fragmentLook(f: GeneratedFragment): { backgroundColor: string; l
   };
 }
 
-export function clusterLabel(title: string): LabelSpec {
-  return { text: title.toUpperCase(), fontSize: 16, strokeColor: '#1a1a1a', fontFamily: 2 };
+/** Marks a collection written by the AI rather than found in the knowledge base. */
+export const AI_MARK = '✦ ';
+
+export function clusterLabel(title: string, origin?: 'ai'): LabelSpec {
+  return { text: (origin === 'ai' ? AI_MARK : '') + title.toUpperCase(), fontSize: 16, strokeColor: '#1a1a1a', fontFamily: 2 };
 }
 
 export function edgeLabel(text: string): LabelSpec {
@@ -86,4 +91,9 @@ export function edgeLabel(text: string): LabelSpec {
 
 export function captionLabel(text: string): LabelSpec {
   return { text, fontSize: 12, strokeColor: cssVar('--color-image-card-caption', '#525252'), fontFamily: 2, textAlign: 'center', verticalAlign: 'bottom' };
+}
+
+/** Outline that tells AI-written boxes apart from ones built from the user's notes. */
+export function originStroke(origin?: 'ai'): { strokeColor: string; strokeStyle: 'dashed'; strokeWidth: number } | null {
+  return origin === 'ai' ? { strokeColor: '#4a4a4a', strokeStyle: 'dashed', strokeWidth: 1 } : null;
 }

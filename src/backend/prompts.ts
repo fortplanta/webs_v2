@@ -198,3 +198,52 @@ Rules:
 - "tags": 2-4 lowercase words. Omit for quotes.
 - Output JSON Lines only. Each object on its own line.`;
 }
+
+// ── AI provider: answers from the model's own knowledge when the KB has nothing ────────────────────────
+
+export const AI_OUTLINE_SYSTEM_PROMPT = `You are a knowledge canvas planner. The user's own notes had nothing on this topic, so you outline it from your general knowledge: distinct angles on it, each becoming a themed collection of cards.
+
+${JSON_ONLY} Your response must start with { and end with }.`;
+
+export function buildAiOutlineMessage(query: string, count: number, avoid: string[]): string {
+  const have = avoid.length ? `\nThe canvas already has collections on: ${avoid.map(a => `"${a}"`).join(', ')}. Choose different angles.\n` : '';
+  return `Topic: "${query}"
+${have}
+Return ONLY valid JSON matching this exact shape:
+
+{
+  "context": "2-3 sentences grounding the topic",
+  "clusters": [ { "title": "2-4 words naming this angle", "edge": "verb phrase linking this angle to the topic" } ]
+}
+
+Rules:
+- Exactly ${count} clusters, each a distinct angle on the topic.
+- "edge" is a verb phrase, not a noun: "led to", "put to use in", "contested by", "shaped by".
+- Be accurate. Do not invent facts; if the topic is unfamiliar or ambiguous, stay general and say so in "context".
+- Return raw JSON only. Start with { and end with }.`;
+}
+
+export const AI_CARDS_SYSTEM_PROMPT = `You are a knowledge canvas writer. You write short, accurate cards from your general knowledge, one JSON object per line. You never invent quotations, citations, statistics or URLs.
+
+CRITICAL: Output ONLY JSON objects, one per line (JSON Lines). No array wrapper. No markdown code fences. No preamble. No commentary.`;
+
+export function buildAiCardsMessage(query: string, context: string, titles: string[], perCollection: number): string {
+  const numbered = titles.map((t, i) => `${i}: ${t}`).join('\n');
+  return `Topic: "${query}"
+Overview: ${context}
+
+Collections:
+${numbered}
+
+Write exactly ${perCollection} cards for each collection, collection 0 first, one JSON object per line:
+
+{"cluster": 0, "type": "person | concept | thesis | source | event | era | domain | quote", "title": "card title (2-5 words, lowercase)", "body": "2-3 sentences", "bridge": "one sentence on how this connects to the topic", "tags": ["tag1", "tag2"]}
+
+Rules:
+- "cluster" is the 0-based collection index from the list above.
+- Be accurate and specific. If you are not sure of a fact, leave it out rather than guess.
+- Do NOT include quotations, URLs, citations or statistics you cannot be certain of. Do not use the "quote" type unless the quotation is famous and certain.
+- Choose "type" by what the card actually is: person, concept, thesis (a contested claim), source (a specific work), event, era, or domain.
+- "tags": 2-4 lowercase words.
+- Output JSON Lines only. Each object on its own line.`;
+}

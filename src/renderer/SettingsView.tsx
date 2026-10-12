@@ -1,6 +1,6 @@
 import { UpdatesPanel } from './Updates';
 import { useEffect, useRef, useState } from 'react';
-import type { KbModuleInfo, Settings, SettingsBundle, SettingsErrors, SettingsPatch } from '../types/settings';
+import { AI_PRESETS, type AiTestResult, type KbModuleInfo, type Settings, SettingsBundle, SettingsErrors, SettingsPatch } from '../types/settings';
 
 type OllamaStatus = { state: 'checking' } | { state: 'ok'; models: string[] } | { state: 'down'; message: string };
 
@@ -30,6 +30,7 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
   const [ollama, setOllama] = useState<OllamaStatus>({ state: 'checking' });
   const [modules, setModules] = useState<KbModuleInfo[]>([]);
   const [captureTest, setCaptureTest] = useState<{ ok: boolean; message: string } | 'checking' | null>(null);
+  const [aiTest, setAiTest] = useState<AiTestResult | 'checking' | null>(null);
   const checkSeq = useRef(0);
 
   useEffect(() => {
@@ -77,6 +78,28 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
     if (!window.confirm('Reset all settings to their defaults?')) return;
     const b = await window.webs.resetSettings();
     setBundle(b); setDraft(b.settings); setModules(b.modules); setErrors({}); setSaved(true);
+  }
+
+  async function saveAndTestAi() {
+    setAiTest('checking');
+    if (dirty) {
+      const r = await window.webs.saveSettings(patch);
+      if (!r.ok) { setErrors(r.errors); setSaved(false); setAiTest(null); return; }
+      setBundle(r.bundle); setDraft(r.bundle.settings); setErrors({}); setSaved(true);
+    }
+    setAiTest(await window.webs.testAi());
+  }
+
+  async function removeAiKey() {
+    const b = await window.webs.clearAiKey();
+    setBundle(b); setDraft({ ...draft!, ai: { ...draft!.ai, apiKey: '' } }); setAiTest(null);
+  }
+
+  function pickPreset(id: string) {
+    const p = AI_PRESETS[id];
+    if (!p) return;
+    setSaved(false); setAiTest(null);
+    setDraft({ ...draft!, ai: { ...draft!.ai, kind: p.kind, baseUrl: p.baseUrl, model: draft!.ai.model || p.model } });
   }
 
   async function testCapture() {
@@ -176,6 +199,45 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
             </div>
             {err('generation.clusterCount')}
             {err('generation.fragmentsPerCluster')}
+          </fieldset>
+
+          <fieldset>
+            <legend>AI provider</legend>
+            <label className="check">
+              <input type="checkbox" checked={draft.ai.enabled} onChange={e => set('ai', 'enabled', e.target.checked)} />
+              Answer from my AI provider when my notes have nothing on a topic
+            </label>
+            <div className="hint">Your notes always come first. Anything the AI writes is marked <strong>✦ AI</strong> and drawn with a dashed outline, so you can tell it apart from what came from your notes. Only the topic is sent to the provider — never your notes.</div>
+            <label>
+              Provider
+              <select value={Object.entries(AI_PRESETS).find(([, p]) => p.baseUrl === draft.ai.baseUrl && p.kind === draft.ai.kind)?.[0] ?? 'custom'} onChange={e => pickPreset(e.target.value)}>
+                {Object.entries(AI_PRESETS).map(([id, p]) => <option key={id} value={id}>{p.label}</option>)}
+                <option value="custom">Custom endpoint…</option>
+              </select>
+            </label>
+            <label>
+              API URL <span className="meta">{draft.ai.kind === 'anthropic' ? 'Anthropic Messages API' : 'any OpenAI-compatible chat endpoint'}</span>
+              <input value={draft.ai.baseUrl} onChange={e => { setAiTest(null); set('ai', 'baseUrl', e.target.value); }} spellCheck={false} />
+            </label>
+            {err('ai.baseUrl')}
+            <label>
+              Model
+              <input value={draft.ai.model} onChange={e => { setAiTest(null); set('ai', 'model', e.target.value); }} placeholder="e.g. gpt-4o-mini" spellCheck={false} />
+            </label>
+            <label>
+              API key <span className="meta">{bundle.aiKeySet ? 'saved in your keychain — type to replace it' : 'stored in your keychain, never shown again'}</span>
+              <input type="password" value={draft.ai.apiKey} onChange={e => { setAiTest(null); set('ai', 'apiKey', e.target.value); }} placeholder={bundle.aiKeySet ? '••••••••••••' : ''} autoComplete="off" spellCheck={false} />
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={draft.ai.topUp} onChange={e => set('ai', 'topUp', e.target.checked)} />
+              Also fill gaps: add AI collections when my notes find fewer than {draft.generation.clusterCount}
+            </label>
+            <div className={`hint ${aiTest && aiTest !== 'checking' && !aiTest.ok ? 'status-down' : ''}`} aria-live="polite">
+              {aiTest === 'checking' && 'Checking…'}
+              {aiTest && aiTest !== 'checking' && aiTest.message}
+              {' '}<button type="button" className="link" onClick={saveAndTestAi} disabled={aiTest === 'checking'}>{dirty ? 'Save & test' : 'Test connection'}</button>
+              {bundle.aiKeySet && <> · <button type="button" className="link" onClick={removeAiKey}>Remove saved key</button></>}
+            </div>
           </fieldset>
 
           <fieldset>

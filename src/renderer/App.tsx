@@ -128,6 +128,7 @@ export function App() {
             </span>
           )}
           {running && <button onClick={stop}>Stop</button>}
+          {model.warning && <span className="hint" role="status">{model.warning}</span>}
           {model.phase === 'error' && (
             <>
               <span className="error" role="alert">{model.error}</span>

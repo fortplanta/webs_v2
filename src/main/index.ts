@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, shell } from 'electron';
+import { testProvider } from '../backend/provider';
 import { checkForUpdate, currentState, installUpdate, openReleasePage, startUpdateChecks } from './updater';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -8,7 +9,7 @@ import { runPivot } from '../backend/pivot';
 import { listOllamaModels, warmUp } from '../backend/llm';
 import { listKbModules } from '../backend/kb';
 import { listInbox, markComposted, markFiled, testCapture } from '../backend/capture';
-import { defaultSettings, getSettings, getSettingsOverrides, mergePatches, setSettingsOverrides, validatePatch } from '../backend/settings';
+import { defaultSettings, getSettings, getSettingsOverrides, mergePatches, setSettingsOverrides, validatePatch, publicSettings, setSecretCodec } from '../backend/settings';
 import type { SaveSettingsResult, SettingsBundle, SettingsPatch } from '../types/settings';
 import { WebStore } from '../backend/db';
 
@@ -30,6 +31,19 @@ async function resolveDefaultKbDir(): Promise<string> {
 }
 
 let store: WebStore;
+
+/** Seals the AI API key with the OS keychain (Electron safeStorage); falls back to plain text where that isn't available. */
+function keychainCodec() {
+  const ok = () => { try { return safeStorage.isEncryptionAvailable(); } catch { return false; } };
+  return {
+    encrypt: (plain: string) => (ok() ? `enc1:${safeStorage.encryptString(plain).toString('base64')}` : `plain:${plain}`),
+    decrypt: (stored: string) => {
+      if (stored.startsWith('plain:')) return stored.slice(6);
+      if (!stored.startsWith('enc1:')) return stored;
+      try { return safeStorage.decryptString(Buffer.from(stored.slice(5), 'base64')); } catch { return ''; }
+    },
+  };
+}
 // The production renderer is served from webs://app/ rather than file://. Chromium won't fetch() file: URLs,
 // which Excalidraw uses to load its (locally bundled) fonts, and a real origin is safer in general.
 const APP_SCHEME = 'webs';
@@ -92,7 +106,8 @@ const SETTINGS_KEY = 'settings';
 
 async function settingsBundle(): Promise<SettingsBundle> {
   const settings = getSettings();
-  return { settings, defaults: defaultSettings(), strategies: Object.keys(strategies), modules: await listKbModules(settings.kb.dir) };
+  // The API key stays in this process: the renderer only learns whether one is saved.
+  return { settings: publicSettings(settings), defaults: defaultSettings(), strategies: Object.keys(strategies), modules: await listKbModules(settings.kb.dir), aiKeySet: !!settings.ai.apiKey };
 }
 
 ipcMain.handle('settings:get', () => settingsBundle());
@@ -109,6 +124,14 @@ ipcMain.handle('settings:save', async (_e, patch: SettingsPatch): Promise<SaveSe
   setSettingsOverrides(next);
   return { ok: true, bundle: await settingsBundle() };
 });
+
+ipcMain.handle('settings:clear-ai-key', async () => {
+  const next = mergePatches(getSettingsOverrides(), { ai: { apiKey: '' } });
+  store.setSetting(SETTINGS_KEY, next);
+  setSettingsOverrides(next);
+  return settingsBundle();
+});
+ipcMain.handle('settings:test-ai', () => testProvider());
 
 ipcMain.handle('settings:reset', async () => {
   store.deleteSetting(SETTINGS_KEY);
@@ -181,6 +204,7 @@ app.whenReady().then(async () => {
   process.env.WEBS_KB_DIR ??= await resolveDefaultKbDir();
   store = new WebStore(dbFile);
   setSettingsOverrides(store.getSetting<SettingsPatch>(SETTINGS_KEY) ?? {});
+  setSecretCodec(keychainCodec());
   serveRenderer();
   warmOnce();
   createWindow();

@@ -34,7 +34,7 @@ interface Props {
 
 type Editing =
   | { kind: 'fragment'; id: string; fragment: GeneratedFragment }
-  | { kind: 'cluster'; id: string; title: string; lens?: string }
+  | { kind: 'cluster'; id: string; title: string; lens?: string; origin?: 'ai' }
   | { kind: 'edge'; id: string; label: string }
   | { kind: 'image'; id: string; data: ImageCardData }
   | null;
@@ -150,7 +150,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     if (!el) return;
     api!.updateScene({ appState: { selectedElementIds: { [hit.id]: true } } as any });
     if (hit.kind === 'fragment') setEditing({ kind: 'fragment', id: hit.id, fragment: el.customData.fragment });
-    else if (hit.kind === 'cluster') setEditing({ kind: 'cluster', id: hit.id, title: el.customData.title, lens: el.customData.lens });
+    else if (hit.kind === 'cluster') setEditing({ kind: 'cluster', id: hit.id, title: el.customData.title, lens: el.customData.lens, origin: el.customData.origin });
     else if (hit.kind === 'image') setEditing({ kind: 'image', id: hit.id, data: el.customData });
     else setEditing({ kind: 'edge', id: hit.id, label: scene().find(e => e.type === 'text' && e.containerId === hit.id && !e.isDeleted)?.text ?? '' });
   }
@@ -192,8 +192,8 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   function editCluster(id: string, title: string) {
     const el = byId(id);
     if (!el) return;
-    apply(updateBox(scene(), id, { customData: { ...el.customData, title }, label: clusterLabel(title || ' ') }, build));
-    setEditing({ kind: 'cluster', id, title, lens: el.customData.lens });
+    apply(updateBox(scene(), id, { customData: { ...el.customData, title }, label: clusterLabel(title || ' ', el.customData.origin) }, build));
+    setEditing({ kind: 'cluster', id, title, lens: el.customData.lens, origin: el.customData.origin });
   }
 
   function editEdge(id: string, label: string) {
@@ -492,6 +492,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
         {pivot && <><span className="hint">Exploring · {pivot.status}</span><button className="secondary" onClick={stopPivot}>Stop</button></>}
         <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={e => { const f = [...(e.target.files ?? [])]; e.target.value = ''; void importImages(f); }} />
         {captureUrl && <button className="secondary" onClick={() => { setInboxOpen(o => !o); void refreshInbox(); }} aria-pressed={inboxOpen}>Inbox{inbox.items.length > 0 ? ` (${inbox.items.length})` : ''}</button>}
+        {model.clusters.some(c => c.origin === 'ai' || c.slots.some(f => f?.origin === 'ai')) && <span className="hint legend" title="Dashed outline = written by your AI provider, not found in your notes">▤ your notes · ✦ AI</span>}
         <span className="hint">Double-click a card or connection to edit · paste or drop text, links and images</span>
       </div>
 
@@ -511,7 +512,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
         <FragmentEditor key={editing.id} fragment={editing.fragment} onChange={f => editFragment(editing.id, f)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} onPivot={() => startPivot(editing.id)} pivoting={!!pivot} stick={stickProps(editing.id)} />
       )}
       {editing?.kind === 'cluster' && (
-        <ClusterEditor key={editing.id} title={editing.title} lens={editing.lens} onChange={t => editCluster(editing.id, t)} onAddFragment={() => addToCluster(editing.id)} onClose={() => setEditing(null)} stick={stickProps(editing.id)} />
+        <ClusterEditor key={editing.id} title={editing.title} lens={editing.lens} origin={editing.origin} aiModel={model.aiModel} onChange={t => editCluster(editing.id, t)} onAddFragment={() => addToCluster(editing.id)} onClose={() => setEditing(null)} stick={stickProps(editing.id)} />
       )}
       {editing?.kind === 'edge' && (
         <EdgeEditor key={editing.id} label={editing.label} onChange={l => editEdge(editing.id, l)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} />

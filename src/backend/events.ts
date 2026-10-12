@@ -38,6 +38,10 @@ export interface GeneratedFragment {
   lens?: string;
   /** A placeholder built straight from a KB passage, awaiting the model's card. */
   draft?: boolean;
+  /** Where the content comes from. Absent = your knowledge base; 'ai' = your AI provider's own knowledge, not your notes. */
+  origin?: 'ai';
+  /** Which model wrote it, for origin 'ai'. */
+  aiModel?: string;
 }
 
 export interface OverviewEdge {
@@ -51,6 +55,10 @@ export type WebEvent =
   | { type: 'kb'; passages: KbPassage[] }
   | { type: 'overview'; context: string; clusters: Array<{ title: string; slots: number; lens?: string }>; edges: OverviewEdge[] }
   | { type: 'fragment'; cluster: number; slot: number; fragment: GeneratedFragment }
+  /** Collections written by the user's AI provider, from index `start` on (0 when the KB found nothing). */
+  | { type: 'ai-outline'; start: number; context: string; clusters: Array<{ title: string; slots: number }>; edges: OverviewEdge[]; model: string }
+  /** Something went wrong with an optional part (e.g. the AI top-up); the web carries on without it. */
+  | { type: 'warning'; message: string }
   | { type: 'done' }
   | { type: 'error'; code: WebsErrorCode; message: string };
 
