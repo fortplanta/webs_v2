@@ -85,6 +85,9 @@ export function FragmentEditor({ fragment, onChange, onDelete, onClose, onPivot,
       <label>How it connects <span className="meta">the bridge to the topic</span>
         <input value={fragment.bridge ?? ''} onChange={e => set({ bridge: e.target.value || undefined })} />
       </label>
+      {fragment.origin === 'wiki' && (
+        <div className="hint ai-note">W From {fragment.sourceLabel ?? 'an offline reference library'}{fragment.kbSources?.[0] ? ` — “${fragment.kbSources[0]}”` : ''}. Not from your notes.</div>
+      )}
       {fragment.origin === 'ai' && (
         <div className="hint ai-note">✦ Written by {fragment.aiModel || 'your AI provider'} from its own knowledge — not from your notes. Check it before relying on it.</div>
       )}
@@ -119,7 +122,7 @@ export function FragmentEditor({ fragment, onChange, onDelete, onClose, onPivot,
 }
 
 export function ClusterEditor({ title, lens, origin, aiModel, onChange, onAddFragment, onClose, stick }: {
-  origin?: 'ai';
+  origin?: 'ai' | 'wiki';
   aiModel?: string;
   stick?: StickProps;
   title: string;
@@ -135,6 +138,7 @@ export function ClusterEditor({ title, lens, origin, aiModel, onChange, onAddFra
       <label>Title
         <input ref={ref} value={title} onChange={e => onChange(e.target.value)} />
       </label>
+      {origin === 'wiki' && <div className="hint ai-note">W Found in an offline reference library, not in your notes.</div>}
       {origin === 'ai' && <div className="hint ai-note">✦ Written by {aiModel || 'your AI provider'} from its own knowledge — not from your notes.</div>}
       {lens && <div className="hint">Found through the “{lens}” route.</div>}
       <StickRow stick={stick} />

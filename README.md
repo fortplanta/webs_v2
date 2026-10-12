@@ -54,9 +54,26 @@ npm run dist       # also the .dmg and .zip → release/
 The app is **ad-hoc signed, not notarized**. One built on your own Mac runs normally; if you move the
 download to another Mac, right-click → *Open* the first time.
 
+## Offline libraries (Wikipedia)
+
+Big reference collections live in `~/Documents/Webs/Libraries/` as one compressed, searchable SQLite file each —
+searching never loads them into memory. **Order of sources: your notes → your libraries → your AI provider.** If your
+notes have nothing on a topic, the enabled libraries are searched (Settings → Libraries) and the web is built from
+what they find, with the same lenses and bridges as your notes. Cards from a library show a **W**, a solid blue
+outline and a link to the article.
+
+Simple English Wikipedia (223k articles) is installed this way. To add a library, download a MediaWiki dump and run:
+
+```bash
+npm run library:import -- path/to/dump.xml.bz2 --name enwiki --label "English Wikipedia" --url https://en.wikipedia.org/wiki/
+```
+
+It streams the dump (any size) through `bzcat`, drops redirects, disambiguation pages, stubs, templates, tables and
+reference sections, and writes `<name>.db`. Simple English takes ~5 minutes and ~0.4 GB.
+
 ## Bring your own AI (optional)
 
-Your notes always come first. If they have nothing on a topic, Webs can ask an AI provider of your choosing to
+Your notes and libraries always come first. If they have nothing on a topic, Webs can ask an AI provider of your choosing to
 write the web from its own knowledge instead — set it up in **Settings → AI provider**: any OpenAI-compatible
 endpoint (OpenAI, OpenRouter, Groq, LM Studio, …) or Anthropic, with your own model name and API key. The key is
 sealed with the macOS keychain and never shown again.

@@ -21,7 +21,18 @@ export interface AiSettings {
   topUp: boolean;
 }
 
+export interface LibraryInfo {
+  name: string;
+  label: string;
+  articles: number;
+  passages: number;
+  /** File size on disk. */
+  bytes: number;
+}
+
 export interface Settings {
+  /** Big offline reference libraries (Wikipedia, …): the second tier, consulted when your notes have nothing. */
+  library: { dir: string; disabled: string[] };
   ai: AiSettings;
   ollama: { baseUrl: string; model: string; idleTimeoutSec: number };
   kb: { dir: string; disabledModules: string[] };
@@ -46,6 +57,7 @@ export interface SettingsBundle {
   modules: KbModuleInfo[];
   /** Whether an API key is saved (the key itself never leaves the main process). */
   aiKeySet: boolean;
+  libraries: LibraryInfo[];
 }
 
 /** Field-keyed messages, e.g. { 'ollama.baseUrl': 'Must be an http(s) URL.' }. */

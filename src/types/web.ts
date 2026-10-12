@@ -6,8 +6,8 @@ export interface ClusterModel {
   title: string;
   /** The retrieval route this collection came from, if any. */
   lens?: string;
-  /** 'ai' for a collection written by the AI provider rather than found in the knowledge base. */
-  origin?: 'ai';
+  /** 'ai' = written by the AI provider; 'wiki' = found in an offline reference library; absent = your notes. */
+  origin?: 'ai' | 'wiki';
   slots: Array<GeneratedFragment | null>;
 }
 

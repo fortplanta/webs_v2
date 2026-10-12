@@ -65,6 +65,16 @@ export class PassageIndex {
     return score;
   }
 
+  /** An index over ready-made passages (e.g. search hits from a library), in the order given. */
+  static fromEntries(entries: Array<{ id: string; source: string; module: string; heading: string; text: string }>): PassageIndex {
+    return new PassageIndex(entries.map(e => {
+      const ts = terms(`${e.heading} ${e.text}`);
+      const tf = new Map<string, number>();
+      for (const t of ts) tf.set(t, (tf.get(t) ?? 0) + 1);
+      return { ...e, tf, termSet: new Set(tf.keys()), length: ts.length };
+    }));
+  }
+
   static fromDocs(docs: Array<{ source: string; text: string }>): PassageIndex {
     const passages: IndexedPassage[] = [];
     for (const doc of docs) {

@@ -202,6 +202,22 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
           </fieldset>
 
           <fieldset>
+            <legend>Libraries</legend>
+            <div className="hint">Big offline reference collections (Wikipedia, …). Your notes come first; when they have nothing on a topic, enabled libraries are searched next, and anything found there is marked <strong>W</strong> with a solid blue outline.</div>
+            {bundle.libraries.length === 0 && <div className="hint">No libraries found in <code>{draft.library.dir || '(no folder set)'}</code>.</div>}
+            {bundle.libraries.map(l => (
+              <label key={l.name} className="check">
+                <input type="checkbox" checked={!draft.library.disabled.includes(l.name)} onChange={e => {
+                  const rest = draft.library.disabled.filter(n => n !== l.name);
+                  set('library', 'disabled', e.target.checked ? rest : [...rest, l.name]);
+                }} />
+                {l.label} <span className="meta">{l.articles.toLocaleString()} articles · {(l.bytes / 1e9 >= 1 ? `${(l.bytes / 1e9).toFixed(1)} GB` : `${Math.round(l.bytes / 1e6)} MB`)}</span>
+              </label>
+            ))}
+            <div className="hint">Add one with <code>npm run library:import -- &lt;dump.xml.bz2&gt;</code> (see the README); libraries are read from <code>{draft.library.dir || 'the libraries folder'}</code>.</div>
+          </fieldset>
+
+          <fieldset>
             <legend>AI provider</legend>
             <label className="check">
               <input type="checkbox" checked={draft.ai.enabled} onChange={e => set('ai', 'enabled', e.target.checked)} />

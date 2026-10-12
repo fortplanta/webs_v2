@@ -34,7 +34,7 @@ interface Props {
 
 type Editing =
   | { kind: 'fragment'; id: string; fragment: GeneratedFragment }
-  | { kind: 'cluster'; id: string; title: string; lens?: string; origin?: 'ai' }
+  | { kind: 'cluster'; id: string; title: string; lens?: string; origin?: 'ai' | 'wiki' }
   | { kind: 'edge'; id: string; label: string }
   | { kind: 'image'; id: string; data: ImageCardData }
   | null;
@@ -492,7 +492,11 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
         {pivot && <><span className="hint">Exploring · {pivot.status}</span><button className="secondary" onClick={stopPivot}>Stop</button></>}
         <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={e => { const f = [...(e.target.files ?? [])]; e.target.value = ''; void importImages(f); }} />
         {captureUrl && <button className="secondary" onClick={() => { setInboxOpen(o => !o); void refreshInbox(); }} aria-pressed={inboxOpen}>Inbox{inbox.items.length > 0 ? ` (${inbox.items.length})` : ''}</button>}
-        {model.clusters.some(c => c.origin === 'ai' || c.slots.some(f => f?.origin === 'ai')) && <span className="hint legend" title="Dashed outline = written by your AI provider, not found in your notes">▤ your notes · ✦ AI</span>}
+        {(() => {
+          const has = (o: 'ai' | 'wiki') => model.clusters.some(c => c.origin === o || c.slots.some(f => f?.origin === o));
+          const parts = [!model.clusters.every(c => c.origin) && '▤ your notes', has('wiki') && 'W Wikipedia', has('ai') && '✦ AI'].filter(Boolean);
+          return parts.length > 1 || has('ai') || has('wiki') ? <span className="hint legend" title="Where each card's content comes from: your notes (no outline), Wikipedia and other offline libraries (solid blue outline), your AI provider (dashed outline)">{parts.join(' · ')}</span> : null;
+        })()}
         <span className="hint">Double-click a card or connection to edit · paste or drop text, links and images</span>
       </div>
 

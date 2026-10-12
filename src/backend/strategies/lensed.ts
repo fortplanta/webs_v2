@@ -17,6 +17,7 @@ import {
 } from '../prompts';
 import { JsonObjectStream, normalizeFragment, parseLensedOverview } from '../parse';
 import { groundingScore } from '../retrieval/ground';
+import type { LibraryRetrieval } from '../library/service';
 import type { Collection, SelectedPassage } from '../retrieval/retrieve';
 import { jaccard, terms } from '../retrieval/text';
 import { aiWeb } from './ai';
@@ -65,10 +66,16 @@ export const lensed: Strategy = async function* (ctx) {
   const collections = retrieval.collections;
   const wanted = ctx.config.clusterCount;
 
-  // Nothing in the KB: the user's own AI provider answers instead (if one is set up).
+  // Nothing in your notes: look in the offline reference libraries (Wikipedia, …), then ask your AI provider.
   if (collections.length === 0) {
+    const lib = ctx.library ? await ctx.library.retrieve(q) : null;
+    if (lib && lib.retrieval.collections.length > 0) {
+      yield { type: 'status', message: `Nothing in your notes — using ${[...lib.libraries.values()].map(l => l.label).join(', ')}…` };
+      yield* kbWeb(ctx, q, lib.retrieval, libraryMarks(lib));
+      return;
+    }
     if (!ctx.ai) {
-      throw new WebsError('kb-empty', 'No knowledge-base results for that query. Add notes to the kb/ folder, try different keywords, or set up an AI provider in Settings to answer from its own knowledge.');
+      throw new WebsError('kb-empty', 'No results for that query in your notes or your libraries. Add notes to the kb/ folder, try different keywords, or set up an AI provider in Settings to answer from its own knowledge.');
     }
     yield* aiWeb({ query: q, signal: ctx.signal, ai: ctx.ai, start: 0, count: wanted, perCollection: ctx.config.fragmentsPerCluster });
     return;
@@ -94,8 +101,26 @@ export const lensed: Strategy = async function* (ctx) {
   yield* kbWeb(ctx, q, retrieval);
 };
 
-/** The knowledge-base web: instant skeleton and excerpts, then the local model's cards. */
-async function* kbWeb(ctx: Parameters<Strategy>[0], q: string, retrieval: Awaited<ReturnType<Parameters<Strategy>[0]['retriever']['retrieve']>>): AsyncGenerator<WebEvent> {
+/** What marks a card as coming from a reference library rather than the user's notes. */
+interface Marks { origin: 'wiki'; of(p: SelectedPassage): Partial<GeneratedFragment> }
+
+function libraryMarks(lib: LibraryRetrieval): Marks {
+  return {
+    origin: 'wiki',
+    of(p) {
+      const i = p.source.indexOf(':');
+      const meta = lib.libraries.get(p.source.slice(0, i));
+      const title = p.source.slice(i + 1);
+      return {
+        origin: 'wiki', sourceLabel: meta?.label, kbSources: [title],
+        ...(meta?.urlBase ? { link: meta.urlBase + encodeURIComponent(title.replace(/ /g, '_')) } : {}),
+      };
+    },
+  };
+}
+
+/** The knowledge-base web: instant skeleton and excerpts, then the local model's cards. `marks` is set for library sources. */
+async function* kbWeb(ctx: Parameters<Strategy>[0], q: string, retrieval: Awaited<ReturnType<Parameters<Strategy>[0]['retriever']['retrieve']>>, marks?: Marks): AsyncGenerator<WebEvent> {
   const collections = retrieval.collections;
   const ids = passageIds(collections);
   const where = new Map<string, { cluster: number; slot: number; p: SelectedPassage }>();
@@ -104,10 +129,10 @@ async function* kbWeb(ctx: Parameters<Strategy>[0], q: string, retrieval: Awaite
   // 2. instant skeleton + excerpt cards (the selected passages ARE the cards, so no separate KB column)
   yield {
     type: 'overview', context: '',
-    clusters: collections.map(c => ({ title: c.label, slots: c.passages.length, lens: c.lens })),
+    clusters: collections.map(c => ({ title: c.label, slots: c.passages.length, lens: c.lens, ...(marks ? { origin: marks.origin } : {}) })),
     edges: defaultEdges(collections),
   };
-  for (const [, w] of where) yield { type: 'fragment', cluster: w.cluster, slot: w.slot, fragment: provisionalFragment(w.p, collections[w.cluster]) };
+  for (const [, w] of where) yield { type: 'fragment', cluster: w.cluster, slot: w.slot, fragment: { ...provisionalFragment(w.p, collections[w.cluster]), ...marks?.of(w.p) } };
 
   // 3. the model: overview, then cards (a failure here leaves the KB-derived web on the canvas)
   try {
@@ -122,7 +147,7 @@ async function* kbWeb(ctx: Parameters<Strategy>[0], q: string, retrieval: Awaite
     const o = outline!;
     yield {
       type: 'overview', context: o.context,
-      clusters: collections.map((c, i) => ({ title: o.titles[i] ?? c.label, slots: c.passages.length, lens: c.lens })),
+      clusters: collections.map((c, i) => ({ title: o.titles[i] ?? c.label, slots: c.passages.length, lens: c.lens, ...(marks ? { origin: marks.origin } : {}) })),
       edges: o.edges.length ? o.edges : defaultEdges(collections),
     };
 
@@ -147,6 +172,7 @@ async function* kbWeb(ctx: Parameters<Strategy>[0], q: string, retrieval: Awaite
         const fragment: GeneratedFragment = {
           ...f, bridge: bridge || undefined, kbSources: [w.p.source], kbPassageIds: [w.p.id], lens: w.p.lens,
           grounding: groundingScore(`${f.title} ${f.body}`, w.p.terms, retrieval.terms),
+          ...marks?.of(w.p),
         };
         yield { type: 'fragment', cluster: w.cluster, slot: w.slot, fragment };
       }

@@ -47,3 +47,8 @@ export function jaccard(a: ReadonlySet<string>, b: ReadonlySet<string>): number 
   for (const t of a) if (b.has(t)) inter++;
   return inter / (a.size + b.size - inter);
 }
+
+/** Lowercased content words (stopwords and tiny words dropped) without stemming — for engines that stem themselves. */
+export function contentWords(text: string): string[] {
+  return words(text).filter(w => /^\d{2,}$/.test(w) || (w.length >= 3 && !STOPWORDS.has(w) && !/^\d+$/.test(w)));
+}

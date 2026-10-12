@@ -15,6 +15,7 @@ export const sealSecret = (plain: string): string => (plain ? codec.encrypt(plai
 export function defaultSettings(): Settings {
   const idleMs = Number(process.env.WEBS_LLM_IDLE_TIMEOUT_MS);
   return {
+    library: { dir: process.env.WEBS_LIBRARY_DIR?.trim() || '', disabled: [] },
     ai: { enabled: false, kind: 'openai', baseUrl: AI_PRESETS.openai.baseUrl, model: '', apiKey: '', topUp: false },
     ollama: {
       baseUrl: process.env.WEBS_LLM_BASE_URL?.trim() || 'http://localhost:11434',
@@ -49,6 +50,7 @@ export function getSettingsOverrides(): SettingsPatch {
 
 export function mergeSettings(base: Settings, patch: SettingsPatch): Settings {
   return {
+    library: { ...base.library, ...patch.library },
     ai: { ...base.ai, ...patch.ai },
     ollama: { ...base.ollama, ...patch.ollama },
     kb: { ...base.kb, ...patch.kb },
@@ -58,7 +60,7 @@ export function mergeSettings(base: Settings, patch: SettingsPatch): Settings {
 }
 
 export function mergePatches(a: SettingsPatch, b: SettingsPatch): SettingsPatch {
-  return { ai: { ...a.ai, ...b.ai }, ollama: { ...a.ollama, ...b.ollama }, kb: { ...a.kb, ...b.kb }, generation: { ...a.generation, ...b.generation }, capture: { ...a.capture, ...b.capture } };
+  return { library: { ...a.library, ...b.library }, ai: { ...a.ai, ...b.ai }, ollama: { ...a.ollama, ...b.ollama }, kb: { ...a.kb, ...b.kb }, generation: { ...a.generation, ...b.generation }, capture: { ...a.capture, ...b.capture } };
 }
 
 /** The effective settings, with the API key unsealed. Backend use only: the renderer gets `publicSettings`. */
@@ -84,6 +86,16 @@ const intIn = (v: unknown, min: number, max: number): v is number =>
 export function validatePatch(patch: SettingsPatch, strategies: string[]): Validated {
   const value: SettingsPatch = {};
   const errors: SettingsErrors = {};
+
+  if (patch.library) {
+    const l: NonNullable<SettingsPatch['library']> = {};
+    if (patch.library.dir !== undefined) l.dir = String(patch.library.dir).trim();
+    if (patch.library.disabled !== undefined) {
+      if (Array.isArray(patch.library.disabled) && patch.library.disabled.every(x => typeof x === 'string')) l.disabled = [...new Set(patch.library.disabled)];
+      else errors['library.disabled'] = 'Invalid library list.';
+    }
+    value.library = l;
+  }
 
   if (patch.ai) {
     const a: NonNullable<SettingsPatch['ai']> = {};

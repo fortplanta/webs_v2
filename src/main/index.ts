@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, shell } from 'electron';
+import { listLibraries } from '../backend/library/service';
 import { testProvider } from '../backend/provider';
 import { checkForUpdate, currentState, installUpdate, openReleasePage, startUpdateChecks } from './updater';
 import { promises as fs } from 'node:fs';
@@ -107,7 +108,7 @@ const SETTINGS_KEY = 'settings';
 async function settingsBundle(): Promise<SettingsBundle> {
   const settings = getSettings();
   // The API key stays in this process: the renderer only learns whether one is saved.
-  return { settings: publicSettings(settings), defaults: defaultSettings(), strategies: Object.keys(strategies), modules: await listKbModules(settings.kb.dir), aiKeySet: !!settings.ai.apiKey };
+  return { settings: publicSettings(settings), defaults: defaultSettings(), strategies: Object.keys(strategies), modules: await listKbModules(settings.kb.dir), aiKeySet: !!settings.ai.apiKey, libraries: listLibraries(settings.library.dir) };
 }
 
 ipcMain.handle('settings:get', () => settingsBundle());
@@ -202,6 +203,7 @@ app.whenReady().then(async () => {
     catch (err) { console.warn('Could not migrate the earlier library:', err); }
   }
   process.env.WEBS_KB_DIR ??= await resolveDefaultKbDir();
+  process.env.WEBS_LIBRARY_DIR ??= path.join(app.getPath('documents'), 'Webs', 'Libraries');
   store = new WebStore(dbFile);
   setSettingsOverrides(store.getSetting<SettingsPatch>(SETTINGS_KEY) ?? {});
   setSecretCodec(keychainCodec());

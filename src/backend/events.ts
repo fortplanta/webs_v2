@@ -38,8 +38,10 @@ export interface GeneratedFragment {
   lens?: string;
   /** A placeholder built straight from a KB passage, awaiting the model's card. */
   draft?: boolean;
-  /** Where the content comes from. Absent = your knowledge base; 'ai' = your AI provider's own knowledge, not your notes. */
-  origin?: 'ai';
+  /** Where the content comes from. Absent = your own notes; 'wiki' = an offline reference library (Wikipedia…); 'ai' = your AI provider's own knowledge. */
+  origin?: 'ai' | 'wiki';
+  /** For origin 'wiki': the library's name, e.g. "Simple English Wikipedia". */
+  sourceLabel?: string;
   /** Which model wrote it, for origin 'ai'. */
   aiModel?: string;
 }
@@ -53,7 +55,7 @@ export interface OverviewEdge {
 export type WebEvent =
   | { type: 'status'; message: string }
   | { type: 'kb'; passages: KbPassage[] }
-  | { type: 'overview'; context: string; clusters: Array<{ title: string; slots: number; lens?: string }>; edges: OverviewEdge[] }
+  | { type: 'overview'; context: string; clusters: Array<{ title: string; slots: number; lens?: string; origin?: 'wiki' }>; edges: OverviewEdge[] }
   | { type: 'fragment'; cluster: number; slot: number; fragment: GeneratedFragment }
   /** Collections written by the user's AI provider, from index `start` on (0 when the KB found nothing). */
   | { type: 'ai-outline'; start: number; context: string; clusters: Array<{ title: string; slots: number }>; edges: OverviewEdge[]; model: string }

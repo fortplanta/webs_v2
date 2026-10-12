@@ -3,6 +3,7 @@ import type { WebEvent } from '../events';
 import type { KbService } from '../kb';
 import type { LlmService } from '../llm';
 import type { Retriever } from '../retrieval/service';
+import type { LibraryRetriever } from '../library/service';
 import type { AiContext } from './ai';
 
 export interface StrategyContext {
@@ -12,6 +13,8 @@ export interface StrategyContext {
   kb: KbService;
   retriever: Retriever;
   llm: LlmService;
+  /** Offline reference libraries (Wikipedia, …), consulted when the notes have nothing. */
+  library: LibraryRetriever | null;
   /** The user's own AI provider, when set up. */
   ai: AiContext | null;
 }

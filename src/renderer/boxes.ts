@@ -66,7 +66,10 @@ export function fragmentLook(f: GeneratedFragment): { backgroundColor: string; l
   const body = f.type === 'quote' ? f.body : clip(f.body, 130);
   const parts = [`${f.type.toUpperCase()}\n${f.title}\n\n${wrap(body, 36)}`];
   if (f.bridge) parts.push(wrap(`↳ ${clip(f.bridge, 80)}`, 36));
-  if (f.origin === 'ai') {
+  if (f.origin === 'wiki') {
+    const low = f.grounding !== undefined && f.grounding < GROUNDING_WARN;
+    parts.push(low ? '⚠ goes beyond the article' : `W ${f.sourceLabel ?? 'Wikipedia'} · ${clip(f.kbSources?.[0] ?? '', 26)}`);
+  } else if (f.origin === 'ai') {
     parts.push(`✦ AI${f.aiModel ? ` · ${clip(f.aiModel, 22)}` : ''} — not from your notes`);
   } else if (f.kbSources?.length) {
     parts.push(f.grounding !== undefined && f.grounding < GROUNDING_WARN ? '⚠ goes beyond your KB' : `▤ ${baseName(f.kbSources[0])}`);
@@ -80,9 +83,10 @@ export function fragmentLook(f: GeneratedFragment): { backgroundColor: string; l
 
 /** Marks a collection written by the AI rather than found in the knowledge base. */
 export const AI_MARK = '✦ ';
+export const WIKI_MARK = 'W · ';
 
-export function clusterLabel(title: string, origin?: 'ai'): LabelSpec {
-  return { text: (origin === 'ai' ? AI_MARK : '') + title.toUpperCase(), fontSize: 16, strokeColor: '#1a1a1a', fontFamily: 2 };
+export function clusterLabel(title: string, origin?: 'ai' | 'wiki'): LabelSpec {
+  return { text: (origin === 'ai' ? AI_MARK : origin === 'wiki' ? WIKI_MARK : '') + title.toUpperCase(), fontSize: 16, strokeColor: '#1a1a1a', fontFamily: 2 };
 }
 
 export function edgeLabel(text: string): LabelSpec {
@@ -94,6 +98,8 @@ export function captionLabel(text: string): LabelSpec {
 }
 
 /** Outline that tells AI-written boxes apart from ones built from the user's notes. */
-export function originStroke(origin?: 'ai'): { strokeColor: string; strokeStyle: 'dashed'; strokeWidth: number } | null {
-  return origin === 'ai' ? { strokeColor: '#4a4a4a', strokeStyle: 'dashed', strokeWidth: 1 } : null;
+export function originStroke(origin?: 'ai' | 'wiki'): { strokeColor: string; strokeStyle: 'dashed' | 'solid'; strokeWidth: number } | null {
+  if (origin === 'ai') return { strokeColor: '#4a4a4a', strokeStyle: 'dashed', strokeWidth: 1 };
+  if (origin === 'wiki') return { strokeColor: '#2f5d9e', strokeStyle: 'solid', strokeWidth: 2 };
+  return null;
 }

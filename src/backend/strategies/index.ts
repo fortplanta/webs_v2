@@ -8,6 +8,7 @@ import type { WebConfig } from '../config';
 import { getSettings } from '../settings';
 import { fileKb, type KbService } from '../kb';
 import { ollamaLlm, type LlmService } from '../llm';
+import { libraryRetriever, type LibraryRetriever } from '../library/service';
 import { aiContext } from '../provider';
 import { kbRetriever, type Retriever } from '../retrieval/service';
 import type { AiContext } from './ai';
@@ -24,6 +25,8 @@ export interface RunOptions {
   kb?: KbService;
   retriever?: Retriever;
   llm?: LlmService;
+  /** Override the reference libraries (tests); `null` = none. */
+  library?: LibraryRetriever | null;
   /** Override the AI provider (tests); `null` = none. */
   ai?: AiContext | null;
 }
@@ -45,6 +48,7 @@ export async function* runStrategy(query: string, opts: RunOptions): AsyncGenera
       kb: opts.kb ?? fileKb,
       retriever: opts.retriever ?? kbRetriever,
       llm: opts.llm ?? ollamaLlm,
+      library: opts.library !== undefined ? opts.library : libraryRetriever,
       ai: opts.ai !== undefined ? opts.ai : aiContext(),
     });
     yield { type: 'done' };
