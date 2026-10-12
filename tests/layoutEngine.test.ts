@@ -153,8 +153,15 @@ describe('tethers', () => {
     expect(centerDist(byId(out.nodes, 'a'), byId(out.nodes, 'c'))).toBeLessThanOrEqual(301);
   });
 
-  it('holds back a card you drag too far (a pinned child is clamped like a rubber band)', () => {
-    const out = settle([n('a', 0, 0), n('c', 2000, 0, 100, 60, { pinned: true })], [T('a', 'c', 400)], firm);
+  it('never fights a card being held, however far it is taken', () => {
+    const start = [n('a', 0, 0), n('c', 2000, 0, 100, 60, { pinned: true })];
+    const r = step(start, [T('a', 'c', 400)], firm);
+    expect(r.moves.size).toBe(0);
+    expect(r.maxMove).toBe(0);
+  });
+
+  it('eases the card back inside its leash once it is let go', () => {
+    const out = settle([n('a', 0, 0), n('c', 2000, 0)], [T('a', 'c', 400)], firm);
     expect(centerDist(byId(out.nodes, 'a'), byId(out.nodes, 'c'))).toBeLessThanOrEqual(401);
   });
 

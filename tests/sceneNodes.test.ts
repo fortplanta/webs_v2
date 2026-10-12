@@ -27,7 +27,9 @@ describe('buildNodes', () => {
   });
   it('reads tethers from flagged connectors only', () => {
     const els = [box('h', 0, 0), box('c', 300, 0), arrow('t', 'h', 'c', { customData: { kind: 'tether', max: 420 } }), arrow('plain', 'c', 'h')];
-    expect(buildNodes(els).tethers).toEqual([{ anchor: 'h', child: 'c', max: 420 }]);
+    expect(buildNodes(els).tethers).toEqual([{ anchor: 'h', child: 'c', max: 640 }]); // an older, shorter leash is raised to today's minimum
+    const long = [els[0], els[1], arrow('t', 'h', 'c', { customData: { kind: 'tether', max: 900 } })];
+    expect(buildNodes(long).tethers[0].max).toBe(900);
   });
 });
 

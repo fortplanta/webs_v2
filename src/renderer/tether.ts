@@ -2,23 +2,22 @@
 // A tether is a thin connector line bound anchor → card, flagged in `customData`, so the connection is visible and
 // the layout engine can read the limit straight off the scene (see layout/sceneNodes.ts). A card has one anchor.
 
+import { leash } from './layout/leash';
 import { sendToBack } from './pivot';
 import type { El } from './sceneEdit';
 
 export const TETHER_KIND = 'tether';
-/** Never tighter than this (center to center), so cards beside a label always fit. */
-export const MIN_TETHER = 340;
-const SLACK = 1.2;
+export { MIN_TETHER } from './layout/leash';
 
 export const isTetherEl = (e: El): boolean => e?.type === 'arrow' && e.customData?.kind === TETHER_KIND && !e.isDeleted;
 
 const bump = (e: El): El => ({ ...e, version: (e.version ?? 0) + 1, versionNonce: Math.floor(Math.random() * 2 ** 31), updated: Date.now() });
 const center = (e: El) => ({ x: e.x + e.width / 2, y: e.y + e.height / 2 });
 
-/** How far a card may stray: its present distance plus some give, at least `MIN_TETHER`. */
+/** How far a card may stray: its present distance plus generous give (see layout/leash.ts). */
 export function tetherLimit(anchor: El, child: El): number {
   const a = center(anchor), c = center(child);
-  return Math.round(Math.max(MIN_TETHER, Math.hypot(c.x - a.x, c.y - a.y) * SLACK));
+  return leash(Math.hypot(c.x - a.x, c.y - a.y));
 }
 
 /** The tether connecting `childId` to its anchor, if any. */

@@ -7,7 +7,8 @@
 
 import { clip, clusterLabel, fragmentLook, FRAG_H, FRAG_W, HEADER_H, typeColors, wrap, edgeLabel } from './boxes';
 import { fanCenters, headerRing, KB_H, KB_W, kbRing, SEED_W } from './layout/organic';
-import { MIN_TETHER, TETHER_KIND } from './tether';
+import { leash } from './layout/leash';
+import { TETHER_KIND } from './tether';
 import { cssVar } from './theme';
 import type { WebModel } from './webModel';
 
@@ -73,7 +74,7 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
       arrows.push({
         type: 'arrow', id: `tether-${ci}-${fi}`, x: 0, y: 0, start: { id: `cluster-${ci}` }, end: { id: `frag-${ci}-${fi}` },
         startArrowhead: null, endArrowhead: null, strokeColor: '#1a1a1a', strokeWidth: 1, strokeStyle: 'dotted', opacity: 55,
-        customData: { kind: TETHER_KIND, max: Math.round(Math.max(MIN_TETHER, dist * 1.2)) },
+        customData: { kind: TETHER_KIND, max: leash(dist) },
       });
     });
   });

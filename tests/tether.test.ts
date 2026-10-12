@@ -18,7 +18,8 @@ describe('tethers', () => {
   });
 
   it('allows some give but never less than the minimum', () => {
-    expect(tetherLimit(box('a', 0, 0), box('b', 500, 0))).toBe(600);
+    expect(tetherLimit(box('a', 0, 0), box('b', 500, 0))).toBe(900);
+    expect(tetherLimit(box('a', 0, 0), box('b', 1000, 0))).toBe(1800);
     expect(tetherLimit(box('a', 0, 0), box('b', 10, 10))).toBe(MIN_TETHER);
   });
 

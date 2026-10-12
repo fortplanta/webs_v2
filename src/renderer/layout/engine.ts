@@ -99,7 +99,7 @@ export function step(input: readonly LayoutNode[], tethers: readonly Tether[], c
   // Collision weights: pinned/locked don't move. Anchors are heavier than their cards.
   const heavy = (n: LayoutNode) => 1 + cfg.anchorMass * (childCount.get(n.id) ?? 0);
   const invCollide = (n: LayoutNode) => (n.pinned || n.locked ? 0 : 1 / heavy(n));
-  // Tether weights: a pinned *child* can still be held back (rubber band), a pinned anchor cannot be moved.
+  // Tether weights: the child takes the pull, the anchor yields a little (heavier = less), a pinned/locked anchor not at all.
   const invTether = (n: LayoutNode, isAnchor: boolean) => (n.locked ? 0 : isAnchor ? (n.pinned ? 0 : 1 / heavy(n)) : 1);
 
   for (let it = 0; it < cfg.iterations; it++) {
@@ -129,8 +129,9 @@ export function step(input: readonly LayoutNode[], tethers: readonly Tether[], c
       const dx = cx(c) - cx(a), dy = cy(c) - cy(a);
       const d = Math.hypot(dx, dy);
       if (d <= t.max || d === 0) continue;
-      // A card held by the pointer is what gets reined in; its anchor stays put.
-      const wa = c.pinned ? 0 : invTether(a, true), wc = invTether(c, false);
+      // Never fight the pointer: a card being held goes wherever the user takes it. Once let go it is eased back.
+      if (c.pinned) continue;
+      const wa = invTether(a, true), wc = invTether(c, false);
       if (wa + wc === 0) continue;
       const excess = d - t.max, ux = dx / d, uy = dy / d;
       c.x -= ux * excess * (wc / (wa + wc)); c.y -= uy * excess * (wc / (wa + wc));

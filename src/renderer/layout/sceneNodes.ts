@@ -7,6 +7,7 @@
 
 import { routeArrows } from '../routeArrows';
 import type { LayoutNode, Tether } from './engine';
+import { MIN_TETHER } from './leash';
 
 type El = Record<string, any>;
 
@@ -78,8 +79,9 @@ export function buildNodes(elements: readonly El[], pinned: ReadonlySet<string> 
   for (const e of els) {
     if (!isTether(e) || !e.startBinding || !e.endBinding) continue;
     const anchor = nodeOf.get(e.startBinding.elementId), child = nodeOf.get(e.endBinding.elementId);
-    const max = Number(e.customData.max);
-    if (anchor && child && anchor !== child && max > 0) tethers.push({ anchor, child, max });
+    // Webs saved with a tighter leash get today's minimum, so older tethers stop feeling like a short chain.
+    const max = Math.max(Number(e.customData.max), MIN_TETHER);
+    if (anchor && child && anchor !== child && e.customData.max > 0) tethers.push({ anchor, child, max });
   }
   return { nodes, tethers, members };
 }
