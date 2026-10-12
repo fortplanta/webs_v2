@@ -17,6 +17,8 @@ Built with Electron, React, Excalidraw and Node's built-in SQLite.
 3. **Explore.** Double-click a card to edit it, or press **↗ Explore a different angle** to grow a new
    collection from it (never repeating notes already on the canvas). Drop, paste or pick images
    (**＋ Image**); paste text or links to add cards; draw connections with the arrow tool.
+   Cards never overlap: drag one onto another and the other glides aside, staying where it was pushed.
+   **Stick to…** (in a card's editor) keeps a card within reach of a label; generated collections come that way.
 4. **Settings** (top right of the first screen): Ollama URL and model, the KB folder and modules, the
    generation strategy, and an optional capture inbox.
 

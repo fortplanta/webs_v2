@@ -9,7 +9,7 @@ import { WebsError } from '../src/backend/errors';
 import type { Retriever } from '../src/backend/retrieval/service';
 import type { LlmService } from '../src/backend/llm';
 import type { GeneratedFragment, PivotEvent } from '../src/backend/events';
-import { addPivotCluster, addThread, placePivot, sendToBack, threadLabelBox, usedPassageIds } from '../src/renderer/pivot';
+import { addPivotCluster, addThread, pivotFootprint, placePivot, sendToBack, threadLabelBox, usedPassageIds } from '../src/renderer/pivot';
 import { hitTest } from '../src/renderer/hit';
 import type { El } from '../src/renderer/sceneEdit';
 
@@ -180,22 +180,29 @@ describe('pivot scene logic', () => {
     expect(usedPassageIds(scene).sort()).toEqual(['a#0', 'b#2']);
   });
 
-  it('places the new collection right of everything, level with the source cluster header, numbered next', () => {
-    expect(placePivot(scene, 'f0')).toEqual({ x: 400 + 280 + 120, y: 0, index: 2 });
-    expect(placePivot([...scene, rect('free', 0, 500)], 'free')).toMatchObject({ y: 500, index: 2 }); // no header: level with the card itself
+  it('places the new collection clear of everything, numbered next, and not on top of anything', () => {
+    const pos = placePivot(scene, 'f0')!;
+    expect(pos.index).toBe(2);
+    const foot = pivotFootprint(pos, 3);
+    for (const e of scene.filter(e => !e.isDeleted)) {
+      const hit = foot.x < e.x + e.width && e.x < foot.x + foot.width && foot.y < e.y + e.height && e.y < foot.y + foot.height;
+      expect(hit).toBe(false);
+    }
+    expect(placePivot([...scene, rect('free', 0, 500)], 'free')).toMatchObject({ index: 2 }); // no header needed
     expect(placePivot(scene, 'nope')).toBeNull();
   });
 
-  it('builds a header and one card per draft, stacked and tagged', () => {
+  it('builds a header and one card per draft, fanned around it and tagged', () => {
     const cards: GeneratedFragment[] = [{ type: 'source', title: 'a', body: 'x', draft: true }, { type: 'source', title: 'b', body: 'y', draft: true }];
-    const r = addPivotCluster(scene, { id: 'pv-1', x: 1000, y: 0, index: 2, title: 'New angle', lens: 'tension', fromCardId: 'f0', cards }, build);
+    const r = addPivotCluster(scene, { id: 'pv-1', x: 1000, y: 0, index: 2, angle: 0, title: 'New angle', lens: 'tension', fromCardId: 'f0', cards }, build);
     expect(r.cardIds).toEqual(['pv-1-c0', 'pv-1-c1']);
     const header = r.elements.find(e => e.id === 'pv-1')!;
     expect(header.customData).toMatchObject({ kind: 'cluster', index: 2, lens: 'tension', pivotFrom: 'f0' });
     const c0 = r.elements.find(e => e.id === 'pv-1-c0')!, c1 = r.elements.find(e => e.id === 'pv-1-c1')!;
     expect(c0.customData).toMatchObject({ kind: 'fragment', cluster: 2, slot: 0 });
-    expect(c1.y).toBeGreaterThan(c0.y + c0.height); // stacked with a gap
-    expect(c0.x).toBe(1000);
+    const away = (c: any) => Math.hypot(c.x + c.width / 2 - (1000 + 140), c.y + c.height / 2 - (0 + 24));
+    expect(away(c0)).toBeCloseTo(400); expect(away(c1)).toBeCloseTo(400); // equidistant from the header
+    expect(c0.y).not.toBe(c1.y);                                         // spread around it, not stacked
   });
 
   it('links with a bound arrow drawn behind everything, with its label right after it', () => {

@@ -4,7 +4,7 @@ vi.mock('@excalidraw/excalidraw', () => ({ convertToExcalidrawElements: (x: unkn
 
 import { initialModel, reduce, progress } from '../src/renderer/webModel';
 import { mergeScene, routeArrows, signature } from '../src/renderer/sceneMerge';
-import { arrowCenterBox } from '../src/renderer/sceneEdit';
+
 
 describe('webModel reducer', () => {
   it('builds ghost slots from overview, fills them from fragment events, tracks progress', () => {
@@ -59,24 +59,13 @@ describe('routeArrows', () => {
     expect(a.x + a.points[1][0]).toBe(400); // left edge of cluster 1
   });
 
-  it('arcs non-adjacent clusters over the header row, never through the clusters between them', () => {
-    const a = find(routeArrows([...els, arrow('e', 0, 2)]), 'e');
-    expect(a.points).toHaveLength(3);
-    expect(a.y).toBe(300); // leaves the top of cluster 0
-    expect(a.points[1][1]).toBeLessThan(-50); // peak is well above the headers
-    expect(a.x + a.points[2][0]).toBe(2 * 400 + 140); // lands on top-center of cluster 2
-    expect(a.roundness).toEqual({ type: 2 });
-    const wider = find(routeArrows([...els, arrow('f', 0, 3)]), 'f');
-    expect(wider.points[1][1]).toBeLessThan(a.points[1][1]); // longer span arcs higher
-  });
-
-  it('works backwards too, and centers the label on the arc peak', () => {
+  it('works backwards too, and centers the label on the middle of the line', () => {
     const out = routeArrows([...els, arrow('e', 3, 1), { id: 'e-label', type: 'text', containerId: 'e', x: 0, y: 0, width: 40, height: 20 }]);
     const a = find(out, 'e');
-    expect(a.points[2][0]).toBeLessThan(0); // runs right to left
+    expect(a.points).toHaveLength(2);
+    expect(a.points[1][0]).toBeLessThan(0); // runs right to left
     const label = find(out, 'e-label');
-    expect(label.x + 20).toBe(a.x + a.points[1][0]);
-    expect(label.y + 10).toBe(a.y + a.points[1][1]);
-    expect(arrowCenterBox(a)).toMatchObject({ x: a.x + a.points[1][0] - 40 });
+    expect(label.x + 20).toBeCloseTo(a.x + a.points[1][0] / 2);
+    expect(label.y + 10).toBeCloseTo(a.y + a.points[1][1] / 2);
   });
 });

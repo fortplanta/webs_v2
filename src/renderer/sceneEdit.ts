@@ -85,6 +85,8 @@ export function addBox(elements: El[], box: NewBox, build: Build): El[] {
 export function removeBox(elements: El[], id: string): El[] {
   // The box, its label, and anything that declares itself part of it (e.g. an image inside a card).
   const gone = new Set([id, ...elements.filter(e => (e.type === 'text' && e.containerId === id) || e.customData?.card === id).map(e => e.id)]);
+  // A tether line is meaningless without both ends.
+  for (const e of elements) if (e.type === 'arrow' && e.customData?.kind === 'tether' && (gone.has(e.startBinding?.elementId) || gone.has(e.endBinding?.elementId))) gone.add(e.id);
   return elements.map(e => {
     if (gone.has(e.id)) return bump({ ...e, isDeleted: true });
     let next = e;

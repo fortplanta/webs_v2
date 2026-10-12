@@ -1,84 +1,96 @@
 // WebModel → Excalidraw element skeletons. Rebuilt on every model change; ids are stable so the
 // canvas can merge updates in place (ghost slot → filled fragment) without disturbing user edits.
 //
-// Layout: KB source cards in a left column; a seed box on top; one column per cluster below it
-// (header box = edge anchor, then fragment slots). Edges are labeled arrows between headers.
+// Layout (see layout/organic.ts): the topic in the middle, the notes it was built from in a ring around it, each
+// collection a header on a wider ring with its cards fanned outward. Cards hang off their header by a thin tether
+// line (which also keeps them near it); headers are joined by labelled edges.
 
-import { clip, clusterLabel, fragmentLook, FRAG_H, FRAG_W, GAP, HEADER_H, typeColors, wrap, edgeLabel } from './boxes';
+import { clip, clusterLabel, fragmentLook, FRAG_H, FRAG_W, HEADER_H, typeColors, wrap, edgeLabel } from './boxes';
+import { fanCenters, headerRing, KB_H, KB_W, kbRing, SEED_W } from './layout/organic';
+import { MIN_TETHER, TETHER_KIND } from './tether';
 import { cssVar } from './theme';
 import type { WebModel } from './webModel';
 
 export { FRAG_H, FRAG_W };
 const SEED_H = 120;
-const ARC_ROOM = 150; // space above the header row for arrows between non-adjacent clusters
-const COL_GAP = 120;
-const KB_H = 110;
 
 type Skeleton = Record<string, unknown>;
 
 export function buildSkeletons(m: WebModel): Skeleton[] {
   const out: Skeleton[] = [];
-  const colCount = Math.max(m.clusters.length, 2);
-  const totalW = colCount * FRAG_W + (colCount - 1) * COL_GAP;
-  const clustersTop = SEED_H + 30 + ARC_ROOM;
+  const seedH = SEED_H + (m.context ? 30 : 0);
 
-  // Seed
+  // Seed, in the middle
   const seedBg = cssVar('--color-seed-bg', '#D2F34C');
   const seedText = cssVar('--color-seed-text', '#0a0a0a');
-  const seedBody = m.context ? `\n\n${wrap(clip(m.context, 400), Math.floor(totalW / 8))}` : '';
+  const seedBody = m.context ? `\n\n${wrap(clip(m.context, 400), Math.floor(SEED_W / 8))}` : '';
   out.push({
-    type: 'rectangle', id: 'seed', x: 0, y: 0, width: totalW, height: SEED_H + (m.context ? 30 : 0),
+    type: 'rectangle', id: 'seed', x: -SEED_W / 2, y: -seedH / 2, width: SEED_W, height: seedH,
     strokeColor: 'transparent', backgroundColor: seedBg, fillStyle: 'solid', roundness: null,
     label: { fontFamily: 2, text: `${m.query.toUpperCase()}${seedBody}`, fontSize: 16, strokeColor: seedText, textAlign: 'left', verticalAlign: 'top' },
   });
 
-  // KB source cards
+  // The notes it was built from, in a ring around it
   const src = typeColors('source');
+  const ring = kbRing(m.kb.length);
   m.kb.forEach((p, i) => {
     out.push({
       type: 'rectangle', id: `kb-${i}`,
-      x: -(FRAG_W + COL_GAP), y: i * (KB_H + GAP), width: FRAG_W, height: KB_H,
+      x: ring[i].x - KB_W / 2, y: ring[i].y - KB_H / 2, width: KB_W, height: KB_H,
       strokeColor: 'transparent', backgroundColor: src.bg, fillStyle: 'solid', roundness: null,
       label: { fontFamily: 2, text: `KB · ${clip(p.source, 30)}${p.lens ? ` · ${p.lens}` : ''}\n\n${wrap(clip(p.text, 110), 36)}`, fontSize: 11, strokeColor: src.text, textAlign: 'left', verticalAlign: 'top' },
     });
   });
 
-  // Clusters
+  // Collections: header on the outer ring, cards fanned outward around it
+  const heads = headerRing(m.clusters.length);
+  const arrows: Skeleton[] = [];
   m.clusters.forEach((cluster, ci) => {
-    const x = ci * (FRAG_W + COL_GAP);
+    const h = heads[ci];
     out.push({
-      type: 'rectangle', id: `cluster-${ci}`, x, y: clustersTop, width: FRAG_W, height: HEADER_H,
+      type: 'rectangle', id: `cluster-${ci}`, x: h.x - FRAG_W / 2, y: h.y - HEADER_H / 2, width: FRAG_W, height: HEADER_H,
       strokeColor: '#1a1a1a', backgroundColor: 'transparent', roundness: null,
       label: clusterLabel(cluster.title),
       customData: { kind: 'cluster', index: ci, title: cluster.title, ...(cluster.lens ? { lens: cluster.lens } : {}) },
     });
 
+    const spots = fanCenters(cluster.slots.length, h, h.angle);
     cluster.slots.forEach((frag, fi) => {
-      const base = { type: 'rectangle', id: `frag-${ci}-${fi}`, x, y: clustersTop + HEADER_H + GAP + fi * (FRAG_H + GAP), width: FRAG_W, height: FRAG_H, roundness: null };
+      const base = { type: 'rectangle', id: `frag-${ci}-${fi}`, x: spots[fi].x - FRAG_W / 2, y: spots[fi].y - FRAG_H / 2, width: FRAG_W, height: FRAG_H, roundness: null };
       if (!frag) {
         // Ghost slot: dashed outline, no text — shows where content will land.
         out.push({ ...base, strokeColor: 'rgba(0,0,0,0.25)', strokeStyle: 'dashed', backgroundColor: 'rgba(0,0,0,0.04)', fillStyle: 'solid' });
-        return;
+      } else {
+        const look = fragmentLook(frag);
+        out.push({
+          ...base, strokeColor: 'transparent', backgroundColor: look.backgroundColor, fillStyle: 'solid',
+          label: look.label,
+          customData: { kind: 'fragment', cluster: ci, slot: fi, fragment: frag },
+        });
       }
-      const look = fragmentLook(frag);
-      out.push({
-        ...base, strokeColor: 'transparent', backgroundColor: look.backgroundColor, fillStyle: 'solid',
-        label: look.label,
-        customData: { kind: 'fragment', cluster: ci, slot: fi, fragment: frag },
+      // A thin line from header to card; it also stops the card drifting far from its header.
+      const dist = Math.hypot(spots[fi].x - h.x, spots[fi].y - h.y);
+      arrows.push({
+        type: 'arrow', id: `tether-${ci}-${fi}`, x: 0, y: 0, start: { id: `cluster-${ci}` }, end: { id: `frag-${ci}-${fi}` },
+        startArrowhead: null, endArrowhead: null, strokeColor: '#1a1a1a', strokeWidth: 1, strokeStyle: 'dotted', opacity: 55,
+        customData: { kind: TETHER_KIND, max: Math.round(Math.max(MIN_TETHER, dist * 1.2)) },
       });
     });
   });
 
-  // Edges
+  // Labelled edges between collections, and the topic's link to the first one
   m.edges.forEach((edge, i) => {
     if (!m.clusters[edge.source] || !m.clusters[edge.target]) return;
-    out.push({
+    arrows.push({
       type: 'arrow', id: `edge-${i}`, x: 0, y: 0,
       start: { id: `cluster-${edge.source}` }, end: { id: `cluster-${edge.target}` },
       strokeColor: '#1a1a1a',
       ...(edge.label ? { label: edgeLabel(edge.label) } : {}),
     });
   });
+  if (m.clusters.length) {
+    arrows.push({ type: 'arrow', id: 'seed-link', x: 0, y: 0, start: { id: 'seed' }, end: { id: 'cluster-0' }, strokeColor: '#1a1a1a', strokeWidth: 1, opacity: 70 });
+  }
 
-  return out;
+  return [...out, ...arrows];
 }

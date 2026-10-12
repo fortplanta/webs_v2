@@ -20,7 +20,28 @@ function Panel({ title, onClose, children }: Shell) {
   );
 }
 
-export function FragmentEditor({ fragment, onChange, onDelete, onClose, onPivot, pivoting }: {
+/** "Stick to…" / "Unstick": keep this item within reach of another (a theme label, say). */
+export interface StickProps {
+  /** Name of the item this one is stuck to, if any. */
+  to: string | null;
+  onStick: () => void;
+  onUnstick: () => void;
+}
+
+function StickRow({ stick }: { stick?: StickProps }) {
+  if (!stick) return null;
+  return (
+    <div className="stick-row">
+      {stick.to
+        ? <><span className="hint">Stays near “{stick.to}”.</span><button onClick={stick.onUnstick}>Unstick</button></>
+        : <><span className="hint">Free to go anywhere.</span><button onClick={stick.onStick}>Stick to…</button></>}
+      {stick.to && <button onClick={stick.onStick}>Change…</button>}
+    </div>
+  );
+}
+
+export function FragmentEditor({ fragment, onChange, onDelete, onClose, onPivot, pivoting, stick }: {
+  stick?: StickProps;
   fragment: GeneratedFragment;
   onChange: (next: GeneratedFragment) => void;
   onDelete: () => void;
@@ -85,6 +106,7 @@ export function FragmentEditor({ fragment, onChange, onDelete, onClose, onPivot,
           <div className="hint">Finds notes in your KB related to this card that aren't on the canvas yet, and adds them as a new collection.</div>
         </div>
       )}
+      <StickRow stick={stick} />
       <div className="editor-actions">
         <button className="danger" onClick={onDelete}>Delete fragment</button>
         <button onClick={onClose}>Done</button>
@@ -93,7 +115,8 @@ export function FragmentEditor({ fragment, onChange, onDelete, onClose, onPivot,
   );
 }
 
-export function ClusterEditor({ title, lens, onChange, onAddFragment, onClose }: {
+export function ClusterEditor({ title, lens, onChange, onAddFragment, onClose, stick }: {
+  stick?: StickProps;
   title: string;
   lens?: string;
   onChange: (title: string) => void;
@@ -108,6 +131,7 @@ export function ClusterEditor({ title, lens, onChange, onAddFragment, onClose }:
         <input ref={ref} value={title} onChange={e => onChange(e.target.value)} />
       </label>
       {lens && <div className="hint">Found through the “{lens}” route.</div>}
+      <StickRow stick={stick} />
       <div className="editor-actions">
         <button onClick={onAddFragment}>Add fragment here</button>
         <button onClick={onClose}>Done</button>
@@ -200,7 +224,8 @@ export function InboxPanel({ items, unsupported, error, busy, serviceUrl, onAdd,
   );
 }
 
-export function ImageCardEditor({ data, onCaption, onDelete, onClose }: {
+export function ImageCardEditor({ data, onCaption, onDelete, onClose, stick }: {
+  stick?: StickProps;
   data: ImageCardData;
   onCaption: (caption: string) => void;
   onDelete: () => void;
@@ -218,6 +243,7 @@ export function ImageCardEditor({ data, onCaption, onDelete, onClose }: {
         {data.name} · {data.width}×{data.height}
         {data.resizedFrom && <> · shrunk from {data.resizedFrom.width}×{data.resizedFrom.height} ({formatBytes(data.resizedFrom.bytes)}); your original file is untouched</>}
       </div>
+      <StickRow stick={stick} />
       <div className="editor-actions">
         <button className="danger" onClick={onDelete}>Delete image</button>
         <button onClick={onClose}>Done</button>

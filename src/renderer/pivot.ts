@@ -2,10 +2,9 @@
 // the card it grew from. Pure (builders are injected) so it can be tested without Excalidraw.
 
 import type { GeneratedFragment } from '../backend/events';
-import { clusterLabel, edgeLabel, fragmentLook, FRAG_H, FRAG_W, GAP, HEADER_H } from './boxes';
+import { clusterLabel, edgeLabel, fragmentLook, FRAG_H, FRAG_W, HEADER_H } from './boxes';
+import { clusterFootprint, fanCenters, findClusterSpot } from './layout/organic';
 import { addBox, updateBox, type Build, type El } from './sceneEdit';
-
-const COL_GAP = 120;
 
 /** KB passages already represented by a card on the canvas — a pivot must not repeat them. */
 export function usedPassageIds(elements: El[]): string[] {
@@ -18,17 +17,23 @@ export function usedPassageIds(elements: El[]): string[] {
 }
 
 /**
- * Where a collection grown from `sourceId` goes: just right of everything on the canvas, level with the
- * source card's own collection header (or the card itself if it has none), numbered after the last collection.
+ * Where a collection grown from `sourceId` goes: outward from the middle of the canvas, as close to the source card
+ * as there's free room, numbered after the last collection. `x`/`y` is the header's top-left; `angle` the direction
+ * its cards fan toward.
  */
-export function placePivot(elements: El[], sourceId: string): { x: number; y: number; index: number } | null {
-  const live = elements.filter(e => !e.isDeleted && e.type !== 'text');
+export function placePivot(elements: El[], sourceId: string, cards = 3): { x: number; y: number; index: number; angle: number } | null {
+  const live = elements.filter(e => !e.isDeleted && e.type !== 'text' && e.type !== 'arrow' && e.type !== 'line');
   const source = live.find(e => e.id === sourceId);
   if (!source) return null;
-  const header = live.find(e => e.customData?.kind === 'cluster' && e.customData.index === source.customData?.cluster);
-  const right = Math.max(...live.map(e => e.x + e.width));
   const index = Math.max(-1, ...live.filter(e => e.customData?.kind === 'cluster').map(e => e.customData.index)) + 1;
-  return { x: right + COL_GAP, y: (header ?? source).y, index };
+  const box = (e: El) => ({ x: e.x, y: e.y, width: e.width, height: e.height });
+  const { header, angle } = findClusterSpot(live.map(box), box(source), cards);
+  return { x: header.x - FRAG_W / 2, y: header.y - HEADER_H / 2, index, angle };
+}
+
+/** The area a pivot of `cards` cards will cover, for bringing it into view. */
+export function pivotFootprint(pos: { x: number; y: number; angle: number }, cards: number) {
+  return clusterFootprint(cards, { x: pos.x + FRAG_W / 2, y: pos.y + HEADER_H / 2 }, pos.angle);
 }
 
 export interface PivotSpec {
@@ -36,13 +41,15 @@ export interface PivotSpec {
   x: number;
   y: number;
   index: number;
+  /** Direction (degrees) the cards fan toward. */
+  angle?: number;
   title: string;
   lens: string;
   fromCardId: string;
   cards: GeneratedFragment[];
 }
 
-/** The new header and one card per draft, stacked under it. Ids: `<id>` for the header, `<id>-c<i>` for cards. */
+/** The new header and one card per draft, fanned around it. Ids: `<id>` for the header, `<id>-c<i>` for cards. */
 export function addPivotCluster(elements: El[], spec: PivotSpec, build: Build): { elements: El[]; headerId: string; cardIds: string[] } {
   const headerId = spec.id;
   let out = addBox(elements, {
@@ -51,11 +58,12 @@ export function addPivotCluster(elements: El[], spec: PivotSpec, build: Build): 
     customData: { kind: 'cluster', index: spec.index, title: spec.title, lens: spec.lens, pivotFrom: spec.fromCardId } as any,
   }, build);
   out = out.map(e => (e.id === headerId ? { ...e, strokeColor: '#1a1a1a', roundness: null } : e));
+  const spots = fanCenters(spec.cards.length, { x: spec.x + FRAG_W / 2, y: spec.y + HEADER_H / 2 }, spec.angle ?? 0);
   const cardIds = spec.cards.map((fragment, i) => {
     const id = `${spec.id}-c${i}`;
     const look = fragmentLook(fragment);
     out = addBox(out, {
-      id, x: spec.x, y: spec.y + HEADER_H + GAP + i * (FRAG_H + GAP), width: FRAG_W, height: FRAG_H,
+      id, x: spots[i].x - FRAG_W / 2, y: spots[i].y - FRAG_H / 2, width: FRAG_W, height: FRAG_H,
       backgroundColor: look.backgroundColor, label: look.label,
       customData: { kind: 'fragment', cluster: spec.index, slot: i, fragment },
     }, build);

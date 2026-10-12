@@ -7,10 +7,12 @@ import type { InboxItem } from '../types/capture';
 import type { SavedFile } from '../types/ipc';
 import { captionLabel, clusterLabel, edgeLabel, FRAG_H, FRAG_W, fragmentLook, GAP, HEADER_H } from './boxes';
 import { fragmentFromCapture, fragmentFromPaste, looksLikeExcalidrawClipboard } from './capture';
-import { ClusterEditor, EdgeEditor, FragmentEditor, ImageCardEditor, InboxPanel } from './Editors';
+import { ClusterEditor, EdgeEditor, FragmentEditor, ImageCardEditor, InboxPanel, type StickProps } from './Editors';
 import { hitTest } from './hit';
+import { useLiveLayout } from './layout/useLiveLayout';
 import { addImageCard, imageCardLayout, type ImageCardData } from './imageCard';
-import { addPivotCluster, addThread, placePivot, threadLabelBox, usedPassageIds } from './pivot';
+import { addPivotCluster, addThread, pivotFootprint, placePivot, threadLabelBox, usedPassageIds } from './pivot';
+import { addTether, removeTether, tetherOf } from './tether';
 import { revealView } from './viewport';
 import { blobToDataURL, contentId, describeResize, ImageImportError, imageTypeOf, looksLikeImage, prepareImage } from './images';
 import { buildSkeletons } from './layout';
@@ -47,6 +49,7 @@ const emptyInbox: InboxState = { items: [], unsupported: 0, error: null, busy: f
 
 const isEditable = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 const build = (skeletons: unknown[]) => convertWithStableIds(skeletons) as El[];
+const makeArrow = (raw: El): El => restoreElements([raw as any], null)[0] as unknown as El;
 
 export function CanvasView({ webId, model, restoredScene, restoredFiles, onSceneChange }: Props) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
@@ -56,15 +59,22 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   const [inboxOpen, setInboxOpen] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
   const [pivot, setPivot] = useState<{ status: string } | null>(null);
+  // Picking what to stick a card to: set to that card's id until the user clicks a target (or cancels).
+  const [sticking, setSticking] = useState<string | null>(null);
+  const [, redraw] = useState(0);
   const cancelPivot = useRef<(() => void) | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout>>();
   const fileInput = useRef<HTMLInputElement>(null);
   const savedFiles = useRef(new Set<string>((restoredFiles ?? []).map(f => f.id)));
   const applied = useRef(new Map<string, string>());
-  const framed = useRef({ kb: false, overview: false });
+  const framed = useRef('');
+  const navigated = useRef(false);
   const lastHash = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const restored = restoredScene !== undefined;
+  // Layout stays hands-off until the user first touches the canvas, so reopening a saved web never rearranges it.
+  const [touched, setTouched] = useState(false);
+  const liveLayout = useLiveLayout(api, touched);
 
   useEffect(() => {
     if (!api || restored) return;
@@ -72,11 +82,13 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     const { elements, signatures } = mergeScene(api.getSceneElements() as any, next, applied.current);
     applied.current = signatures;
     api.updateScene({ elements: elements as any });
+    setTouched(true); // fresh generations settle themselves from the start
 
-    // Re-frame once when the first content lands and once when the outline defines the layout.
-    const stage = model.clusters.length > 0 ? 'overview' : 'kb';
-    if (!framed.current[stage]) {
-      framed.current[stage] = true;
+    // Keep the whole web in view while it grows (collections arrive one after another and the web is centred on
+    // the topic, so each addition shifts the middle) — until the user takes over the viewport.
+    const stage = `${model.kb.length > 0 ? 'kb' : ''}:${model.clusters.length}`;
+    if (!navigated.current && framed.current !== stage) {
+      framed.current = stage;
       frame(elements as El[], true);
     }
   }, [api, model, restored]);
@@ -104,6 +116,8 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   }
 
   function handleChange(elements: readonly { id: string; version: number; type?: string; fileId?: string; isDeleted?: boolean }[], _app: unknown, files: Record<string, BinaryFileData>) {
+    liveLayout.poke();
+
     // Persist each image's pixels once, the first time an image element referencing it is on the scene.
     for (const el of elements) {
       if (el.type !== 'image' || el.isDeleted || !el.fileId || savedFiles.current.has(el.fileId)) continue;
@@ -212,6 +226,53 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     apply(updateBox(scene(), id, { backgroundColor: look.backgroundColor, customData: { ...el.customData, fragment }, link: fragment.link ?? null, label: look.label }, build));
   }
 
+  // ── Tethers: keep a card within reach of another ───────────────────────────
+
+  function nameOf(el: El): string {
+    const d = el.customData ?? {};
+    return (d.kind === 'cluster' ? d.title : d.kind === 'fragment' ? d.fragment?.title : d.caption || d.name) || 'an item';
+  }
+
+  function stickProps(id: string): StickProps {
+    const t = tetherOf(scene(), id);
+    const anchor = t && byId(t.startBinding.elementId);
+    return {
+      to: anchor ? nameOf(anchor) : null,
+      onStick: () => { setEditing(null); setSticking(id); },
+      onUnstick: () => { apply(removeTether(scene(), id)); redraw(n => n + 1); },
+    };
+  }
+
+  function finishSticking(anchorId: string | null) {
+    const child = sticking;
+    setSticking(null);
+    if (!child || !anchorId) return;
+    if (anchorId === child) return;
+    const next = addTether(scene(), anchorId, child, makeArrow);
+    if (next === scene() || !tetherOf(next, child)) { say('error', "That would make a loop — a label can't stay near something that stays near it."); return; }
+    apply(next);
+    say('info', `Stuck to “${nameOf(byId(anchorId)!)}”. Drag either one to see it follow.`);
+  }
+
+  function onPointerDownCapture(e: React.PointerEvent) {
+    navigated.current = true;
+    if (!touched) setTouched(true);
+    if (!sticking || !api) return;
+    e.stopPropagation();
+    e.preventDefault();
+    const app = api.getAppState();
+    const { x, y } = viewportCoordsToSceneCoords({ clientX: e.clientX, clientY: e.clientY }, app);
+    const hit = hitTest(api.getSceneElements() as unknown as El[], x, y, app.zoom.value);
+    finishSticking(hit && hit.kind !== 'edge' ? hit.id : null);
+  }
+
+  useEffect(() => {
+    if (!sticking) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSticking(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sticking]);
+
   // ── Pivot: grow a new collection out of a card ────────────────────────────
 
   function startPivot(cardId: string) {
@@ -234,11 +295,14 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     switch (ev.type) {
       case 'status': setPivot({ status: ev.message }); break;
       case 'plan': {
-        const pos = placePivot(scene(), cardId);
+        const pos = placePivot(scene(), cardId, ev.cards.length);
         if (!pos) { stopPivot(); say('error', 'The card this was growing from is gone.'); return; }
         const added = addPivotCluster(scene(), { id: prefix, ...pos, title: ev.title, lens: ev.lens, fromCardId: cardId, cards: ev.cards }, build);
-        apply(addThread(added.elements, { id: `${prefix}-thread`, fromId: cardId, toId: prefix, label: ev.edge }, build, raw => restoreElements([raw as any], null)[0] as unknown as El));
-        reveal({ x: pos.x, y: pos.y, width: FRAG_W, height: HEADER_H + GAP + ev.cards.length * (FRAG_H + GAP) });
+        let next = addThread(added.elements, { id: `${prefix}-thread`, fromId: cardId, toId: prefix, label: ev.edge }, build, makeArrow);
+        // The new cards stay near their collection's header.
+        for (const id of added.cardIds) next = addTether(next, added.headerId, id, makeArrow);
+        apply(next);
+        reveal(pivotFootprint(pos, ev.cards.length));
         break;
       }
       case 'title': {
@@ -408,7 +472,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
 
   return (
     <div className="canvas">
-      <div className="canvas-inner" onDoubleClickCapture={onDoubleClickCapture} onDragOverCapture={onDragOverCapture} onDropCapture={onDropCapture}>
+      <div className={`canvas-inner${sticking ? " sticking" : ""}`} onPointerDownCapture={onPointerDownCapture} onWheelCapture={() => { navigated.current = true; }} onDoubleClickCapture={onDoubleClickCapture} onDragOverCapture={onDragOverCapture} onDropCapture={onDropCapture}>
         <Excalidraw
           excalidrawAPI={setApi}
           onChange={handleChange as any}
@@ -424,6 +488,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
       <div className="canvas-tools">
         <button onClick={addFreeFragment} disabled={!api}>＋ Fragment</button>
         <button className="secondary" onClick={() => fileInput.current?.click()} disabled={!api}>＋ Image</button>
+        {sticking && <><span className="hint">Click the card or label it should stay near</span><button className="secondary" onClick={() => setSticking(null)}>Cancel</button></>}
         {pivot && <><span className="hint">Exploring · {pivot.status}</span><button className="secondary" onClick={stopPivot}>Stop</button></>}
         <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={e => { const f = [...(e.target.files ?? [])]; e.target.value = ''; void importImages(f); }} />
         {captureUrl && <button className="secondary" onClick={() => { setInboxOpen(o => !o); void refreshInbox(); }} aria-pressed={inboxOpen}>Inbox{inbox.items.length > 0 ? ` (${inbox.items.length})` : ''}</button>}
@@ -440,13 +505,13 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
       {notice && <div className={`canvas-notice ${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}>{notice.text}</div>}
 
       {editing?.kind === 'image' && (
-        <ImageCardEditor key={editing.id} data={editing.data} onCaption={c => editImage(editing.id, c)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} />
+        <ImageCardEditor key={editing.id} data={editing.data} onCaption={c => editImage(editing.id, c)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} stick={stickProps(editing.id)} />
       )}
       {editing?.kind === 'fragment' && (
-        <FragmentEditor key={editing.id} fragment={editing.fragment} onChange={f => editFragment(editing.id, f)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} onPivot={() => startPivot(editing.id)} pivoting={!!pivot} />
+        <FragmentEditor key={editing.id} fragment={editing.fragment} onChange={f => editFragment(editing.id, f)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} onPivot={() => startPivot(editing.id)} pivoting={!!pivot} stick={stickProps(editing.id)} />
       )}
       {editing?.kind === 'cluster' && (
-        <ClusterEditor key={editing.id} title={editing.title} lens={editing.lens} onChange={t => editCluster(editing.id, t)} onAddFragment={() => addToCluster(editing.id)} onClose={() => setEditing(null)} />
+        <ClusterEditor key={editing.id} title={editing.title} lens={editing.lens} onChange={t => editCluster(editing.id, t)} onAddFragment={() => addToCluster(editing.id)} onClose={() => setEditing(null)} stick={stickProps(editing.id)} />
       )}
       {editing?.kind === 'edge' && (
         <EdgeEditor key={editing.id} label={editing.label} onChange={l => editEdge(editing.id, l)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} />
