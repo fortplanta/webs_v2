@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { PivotEvent, WebEvent } from '../backend/events';
-import type { WebsApi } from '../types/ipc';
+import type { UpdateState, WebsApi } from '../types/ipc';
 
 let nextId = 1;
 
@@ -49,6 +49,16 @@ const api: WebsApi = {
   getInbox: () => ipcRenderer.invoke('capture:inbox'),
   fileCapture: (id, nodeId) => ipcRenderer.invoke('capture:file', id, nodeId),
   dismissCapture: id => ipcRenderer.invoke('capture:dismiss', id),
+  getVersion: () => ipcRenderer.invoke('update:version'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  openReleasePage: () => ipcRenderer.invoke('update:open-page'),
+  onUpdateState(cb) {
+    const handler = (_e: unknown, s: UpdateState) => cb(s);
+    ipcRenderer.on('update:state', handler);
+    void ipcRenderer.invoke('update:state').then(cb);
+    return () => { ipcRenderer.removeListener('update:state', handler); };
+  },
   testCapture: (url, token) => ipcRenderer.invoke('capture:test', url, token),
 };
 

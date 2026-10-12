@@ -37,6 +37,19 @@ export interface SaveWebInput {
   scene?: SceneElements;
 }
 
+export type UpdateState =
+  | { kind: 'idle' }
+  | { kind: 'available'; version: string; notes: string; pageUrl: string; canInstall: boolean; whyNot?: string }
+  | { kind: 'downloading'; version: string; percent: number }
+  | { kind: 'installing'; version: string }
+  | { kind: 'error'; message: string; pageUrl?: string };
+
+export interface UpdateCheckResult {
+  status: 'current' | 'available' | 'error' | 'busy';
+  version?: string;
+  message?: string;
+}
+
 export interface WebsApi {
   /** Starts a generation; events arrive via onEvent until 'done' or 'error'. Returns a cancel function. */
   generate(query: string, onEvent: (event: WebEvent) => void): () => void;
@@ -68,6 +81,16 @@ export interface WebsApi {
   /** Mark a capture as placed on the canvas (nodeId = the card's element id). */
   fileCapture(id: string, nodeId: string): Promise<{ ok: boolean; message?: string }>;
   dismissCapture(id: string): Promise<{ ok: boolean; message?: string }>;
+  /** This app's version. */
+  getVersion(): Promise<string>;
+  /** Look for a newer release now. A found update also arrives through onUpdateState. */
+  checkForUpdates(): Promise<UpdateCheckResult>;
+  /** Download, verify and install the pending update, then restart into it. */
+  installUpdate(): Promise<void>;
+  /** Open the release page in the browser (manual download). */
+  openReleasePage(): Promise<void>;
+  /** Current update state, then every change. Returns an unsubscribe function. */
+  onUpdateState(cb: (s: UpdateState) => void): () => void;
   /** Test a service URL + token without saving them. */
   testCapture(url: string, token: string): Promise<CaptureTestResult>;
 }

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } from 'electron';
+import { checkForUpdate, currentState, installUpdate, openReleasePage, startUpdateChecks } from './updater';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -123,6 +124,11 @@ ipcMain.handle('settings:pick-kb-folder', async () => {
   return r.canceled ? null : r.filePaths[0];
 });
 
+ipcMain.handle('update:version', () => app.getVersion());
+ipcMain.handle('update:state', () => currentState());
+ipcMain.handle('update:check', () => checkForUpdate());
+ipcMain.handle('update:install', () => installUpdate());
+ipcMain.handle('update:open-page', () => openReleasePage());
 ipcMain.handle('capture:inbox', () => listInbox());
 ipcMain.handle('capture:file', (_e, id: string, nodeId: string) => markFiled(id, nodeId));
 ipcMain.handle('capture:dismiss', (_e, id: string) => markComposted(id));
@@ -178,6 +184,7 @@ app.whenReady().then(async () => {
   serveRenderer();
   warmOnce();
   createWindow();
+  startUpdateChecks();
 });
 app.on('will-quit', () => store?.close());
 app.on('window-all-closed', () => app.quit());

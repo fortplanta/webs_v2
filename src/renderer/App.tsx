@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SavedFile, SavedWebSummary } from '../types/ipc';
 import { CanvasView } from './CanvasView';
 import { SettingsView } from './SettingsView';
+import { UpdateBanner } from './Updates';
 import { hydrateScene } from './sceneEdit';
 import { initialModel, progress, reduce, type WebModel } from './webModel';
 

@@ -1,3 +1,4 @@
+import { UpdatesPanel } from './Updates';
 import { useEffect, useRef, useState } from 'react';
 import type { KbModuleInfo, Settings, SettingsBundle, SettingsErrors, SettingsPatch } from '../types/settings';
 
@@ -195,6 +196,8 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
             </div>
             <div className="hint">Your webs-capture service. Captures from the browser extension (see <code>extension/</code>) and your phone appear in the canvas Inbox.</div>
           </fieldset>
+
+          <UpdatesPanel />
 
           <div className="actions">
             <button type="submit" disabled={!dirty}>Save</button>

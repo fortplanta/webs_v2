@@ -54,6 +54,21 @@ npm run dist       # also the .dmg and .zip → release/
 The app is **ad-hoc signed, not notarized**. One built on your own Mac runs normally; if you move the
 download to another Mac, right-click → *Open* the first time.
 
+## Updates
+
+Installed copies of Webs check GitHub Releases on launch (and every few hours) and show a notice when a newer
+version is out. **Install & restart** downloads it, verifies its checksum, swaps the app in place and relaunches —
+no dmg to drag. (Settings → Updates shows the version and can check on demand.) If Webs can't replace itself — it's
+running from the dmg, or its folder isn't writable — the notice offers the download instead.
+
+To publish an update (needs `gh` logged in, and the repo public so the app can download without logging in):
+
+```bash
+npm run release -- patch    # or minor / major: bump, commit, push, build, publish the release
+```
+
+The first install of a version that has the updater still has to be the dmg; after that, updates install themselves.
+
 ## Where things are
 
 | | Development | Packaged app |
@@ -65,8 +80,8 @@ Override with `WEBS_DB` (database file) and `WEBS_KB_DIR` (KB folder). The KB fo
 in Settings. A library saved by earlier builds (in `~/Library/Application Support/webs-v1a`) is copied
 across once on first launch; the original is left untouched.
 
-The app makes no network requests of its own: fonts are bundled, and the only outbound calls are to your
-Ollama (and your capture service, if you set one).
+The app's only outbound calls are to your Ollama, your capture service (if you set one), and GitHub (the update
+check); fonts are bundled.
 
 ## How generation works
 
