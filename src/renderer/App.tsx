@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SavedFile, SavedWebSummary } from '../types/ipc';
 import { CanvasView } from './CanvasView';
+import { CommandPalette } from './CommandPalette';
+import type { Command } from './commands';
 import { SettingsView } from './SettingsView';
-import { TopBar, type View } from './TopBar';
+import { buildRows, TopBar, type View } from './TopBar';
+import type { SettingsBundle } from '../types/settings';
 import { UpdateBanner } from './Updates';
 import { hydrateScene } from './sceneEdit';
 import { initialModel, progress, reduce, type WebModel } from './webModel';
@@ -27,6 +30,9 @@ export function App() {
   const [library, setLibrary] = useState<SavedWebSummary[]>([]);
   const [showSettings, setShowSettings] = useState(false);
   const [view, setView] = useState<View>('cluster');
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [bundle, setBundle] = useState<SettingsBundle | null>(null);
+  const canvasCommands = useRef<(() => Command[]) | null>(null);
 
   const cancel = useRef<(() => void) | null>(null);
   const modelRef = useRef<WebModel | null>(null);
@@ -38,6 +44,20 @@ export function App() {
   }, []);
 
   useEffect(() => { if (!model) refreshLibrary(); }, [model, refreshLibrary]);
+
+  // ⌘K opens the command palette from anywhere.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') { e.preventDefault(); setPaletteOpen(o => !o); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  useEffect(() => {
+    if (!paletteOpen) return;
+    refreshLibrary();
+    void window.webs.getSettings().then(setBundle);
+  }, [paletteOpen, refreshLibrary]);
   useEffect(() => () => { cancel.current?.(); clearTimeout(saveTimer.current); }, []);
 
   function setCurrent(next: WebModel | null) {
@@ -115,6 +135,7 @@ export function App() {
     if (m && id) void window.webs.saveWeb({ id, query: m.query, scene: elements });
   }, []);
 
+  const renderScreen = () => {
   if (showSettings) return <SettingsView onClose={() => setShowSettings(false)} />;
 
   if (model && webId) {
@@ -140,7 +161,7 @@ export function App() {
             </>
           )}
         </TopBar>
-        <CanvasView key={webId} webId={webId} model={model} restoredScene={restoredScene} restoredFiles={restoredFiles} onSceneChange={onSceneChange} view={view} />
+        <CanvasView key={webId} webId={webId} model={model} restoredScene={restoredScene} restoredFiles={restoredFiles} onSceneChange={onSceneChange} view={view} registerCommands={p => { canvasCommands.current = p; }} />
       </div>
     );
   }
@@ -176,5 +197,38 @@ export function App() {
         )}
       </div>
     </div>
+  );
+  };
+
+  const commands = (q: string): Command[] => {
+    const onCanvas = !!(model && webId);
+    const cmds: Command[] = [];
+    if (onCanvas) cmds.push(...(canvasCommands.current?.() ?? []));
+    cmds.push(
+      ...(onCanvas ? [
+        { id: 'view-cluster', group: 'Navigation', label: 'Cluster view', checked: view === 'cluster', run: () => setView('cluster') },
+        { id: 'view-timeline', group: 'Navigation', label: 'Timeline view', checked: view === 'timeline', run: () => setView('timeline') },
+        { id: 'library', group: 'Navigation', label: 'Go to library', keywords: 'home back saved webs', run: back },
+      ] : []),
+      { id: 'settings', group: 'Navigation', label: 'Open settings', keywords: 'preferences ollama knowledge base', run: () => setShowSettings(true) },
+    );
+    for (const w of library) cmds.push({ id: `web-${w.id}`, group: 'Saved webs', label: w.query, detail: `${w.fragmentCount} fragments · ${ago(w.updatedAt)}`, run: () => open(w.id) });
+    if (bundle) {
+      const save = async (patch: Record<string, unknown>) => { const r = await window.webs.saveSettings(patch as any); if (r.ok) setBundle(r.bundle); };
+      for (const r of buildRows(bundle, save)) {
+        if (r.id === 'notes') continue;
+        cmds.push({ id: `row-${r.id}`, group: r.group === 'Models' ? 'AI model' : 'Local DB', label: r.group === 'Models' ? `Use ${r.label}` : `${r.checked ? 'Turn off' : 'Turn on'} ${r.label}`, detail: r.detail, checked: r.group === 'Models' ? r.checked : undefined, run: r.run });
+      }
+    }
+    // Last, so ↵ runs the best match for what was typed; it is the first item only when nothing else matches.
+    if (q.trim().length >= 2) cmds.push({ id: 'generate', group: 'New web', label: `Generate a web for “${q.trim()}”`, keywords: q, run: () => start(q.trim()) });
+    return cmds;
+  };
+
+  return (
+    <>
+      {renderScreen()}
+      {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}
+    </>
   );
 }

@@ -52,6 +52,7 @@ export function BottomToolbar({ disabled, onFragment, onImage, inbox, chips = []
               <button className="menu-item" onClick={() => onZoom('in')}><span className="menu-check"><IconPlus /></span><span className="menu-text">Zoom in</span><span className="menu-key">⌘+</span></button>
               <button className="menu-item" onClick={() => onZoom('out')}><span className="menu-check"><IconMinus /></span><span className="menu-text">Zoom out</span><span className="menu-key">⌘−</span></button>
               <div className="menu-sep" />
+              <div className="menu-note">Press <strong>⌘K</strong> for commands, cards and saved webs.</div>
               {legend && <div className="menu-note" title="Dashed outline: your AI provider. Solid blue outline: an offline library.">{legend}</div>}
               <div className="menu-note">Double-click a card or connection to edit. Paste or drop text, links and images.</div>
             </div>

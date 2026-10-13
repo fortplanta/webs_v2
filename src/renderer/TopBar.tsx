@@ -23,7 +23,7 @@ const hostLabel = (ai: SettingsBundle['settings']['ai']) =>
   /anthropic/i.test(ai.baseUrl) ? 'Claude' : /openai\.com/i.test(ai.baseUrl) ? 'ChatGPT' : /openrouter/i.test(ai.baseUrl) ? 'OpenRouter' : /groq/i.test(ai.baseUrl) ? 'Groq' : 'Custom model';
 const inferKind = (baseUrl: string) => (/anthropic/i.test(baseUrl) ? 'anthropic' : 'openai') as 'anthropic' | 'openai';
 
-interface Row { id: string; group: 'Models' | 'Local DB'; label: string; detail?: string; checked: boolean; run: () => Promise<void> | void }
+export interface Row { id: string; group: 'Models' | 'Local DB'; label: string; detail?: string; checked: boolean; run: () => Promise<void> | void }
 
 /** The model and local-library picker that hangs off the Settings button. ⌘1…⌘9 pick the rows in order. */
 function ModelsMenu({ onClose, onSettings }: { onClose: () => void; onSettings: () => void }) {
@@ -69,7 +69,7 @@ function ModelsMenu({ onClose, onSettings }: { onClose: () => void; onSettings: 
   );
 }
 
-function buildRows(b: SettingsBundle, save: (patch: Record<string, unknown>) => Promise<void>): Row[] {
+export function buildRows(b: SettingsBundle, save: (patch: Record<string, unknown>) => Promise<void>): Row[] {
   const ai = b.settings.ai, ollama = b.settings.ollama;
   const rows: Row[] = [
     { id: 'ollama', group: 'Models', label: 'Ollama', detail: ollama.model, checked: ai.enabled && ai.kind === 'ollama', run: () => save({ ai: { enabled: true, kind: 'ollama' } }) },

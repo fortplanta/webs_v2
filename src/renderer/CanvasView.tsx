@@ -7,6 +7,7 @@ import type { InboxItem } from '../types/capture';
 import type { SavedFile } from '../types/ipc';
 import { captionLabel, clusterLabel, edgeLabel, FRAG_H, FRAG_W, GAP, HEADER_H } from './boxes';
 import { BottomToolbar } from './BottomToolbar';
+import type { Command } from './commands';
 import { TimelineView } from './TimelineView';
 import type { TimelineCard } from './timeline';
 import { addCard, updateCard } from './card';
@@ -36,6 +37,8 @@ interface Props {
   onSceneChange?: (elements: unknown[]) => void;
   /** 'timeline' shows the cards along a time axis instead of the collection map. */
   view?: 'cluster' | 'timeline';
+  /** Lets the command palette ask the canvas for its commands (add, zoom, jump to a card…). */
+  registerCommands?: (provider: (() => Command[]) | null) => void;
 }
 
 type Editing =
@@ -57,7 +60,7 @@ const isEditable = (t: EventTarget | null) => t instanceof HTMLElement && (t.isC
 const build = (skeletons: unknown[]) => convertWithStableIds(skeletons) as El[];
 const makeArrow = (raw: El): El => restoreElements([raw as any], null)[0] as unknown as El;
 
-export function CanvasView({ webId, model, restoredScene, restoredFiles, onSceneChange, view = 'cluster' }: Props) {
+export function CanvasView({ webId, model, restoredScene, restoredFiles, onSceneChange, view = 'cluster', registerCommands }: Props) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
   const [captureUrl, setCaptureUrl] = useState('');
@@ -497,6 +500,45 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     if (!r.ok) setInbox(i => ({ ...i, error: `Couldn't dismiss it (${r.message}).` }));
   }
 
+  function zoom(how: 'in' | 'out' | 'fit') {
+    if (!api) return;
+    const z = api.getAppState().zoom.value;
+    if (how === 'fit') frame(api.getSceneElements() as unknown as El[], true);
+    else api.updateScene({ appState: { zoom: { value: Math.min(4, Math.max(0.05, how === 'in' ? z * 1.25 : z / 1.25)) } } as any });
+  }
+
+  /** Bring a card into view: select and centre it on the map, or open it from the timeline. */
+  function focusCard(id: string) {
+    const el = byId(id);
+    if (!api || !el) return;
+    if (viewRef.current === 'timeline') { openEditor({ id, kind: 'fragment' }); return; }
+    api.updateScene({ appState: selectionFor(id) as any });
+    api.scrollToContent(el as any, { animate: true, fitToViewport: false });
+  }
+
+  // The command palette asks for these when it opens, so they always reflect the current scene and selection.
+  const buildCommands = (): Command[] => {
+    const selected = api ? Object.keys(api.getAppState().selectedElementIds).map(id => byId(id)).find(e => e?.customData?.kind === 'fragment') : undefined;
+    const cmds: Command[] = [
+      { id: 'add-fragment', group: 'Actions', label: 'Add fragment', keywords: 'new card', run: addFreeFragment },
+      { id: 'add-image', group: 'Actions', label: 'Add image', keywords: 'picture photo', run: () => fileInput.current?.click() },
+      { id: 'zoom-fit', group: 'Actions', label: 'Zoom to fit', hint: '⇧1', keywords: 'view', run: () => zoom('fit') },
+      ...(selected && !pivot ? [{ id: 'explore', group: 'Actions', label: 'Explore a different angle', detail: selected.customData.fragment?.title, run: () => startPivot(selected.id) }] : []),
+    ];
+    for (const e of scene()) {
+      if (e.isDeleted || e.type !== 'rectangle' || e.customData?.kind !== 'fragment') continue;
+      const f = e.customData.fragment;
+      cmds.push({ id: `card-${e.id}`, group: 'Cards', label: f.title, detail: f.type, keywords: f.body, run: () => focusCard(e.id) });
+    }
+    return cmds;
+  };
+  const buildRef = useRef(buildCommands);
+  buildRef.current = buildCommands;
+  useEffect(() => {
+    registerCommands?.(() => buildRef.current());
+    return () => registerCommands?.(null);
+  }, []);
+
   return (
     <div className="canvas">
       {view === 'timeline' && <TimelineView topic={model.query} cards={timelineCards} onOpen={(id, kind) => openEditor({ id, kind })} />}
@@ -528,12 +570,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
           const parts = [!model.clusters.every(c => c.origin) && '▤ your notes', has('wiki') && 'W Wikipedia', has('ai') && '✦ AI'].filter(Boolean);
           return parts.length > 1 || has('ai') || has('wiki') ? parts.join(' · ') : null;
         })()}
-        onZoom={how => {
-          if (!api) return;
-          const zoom = api.getAppState().zoom.value;
-          if (how === 'fit') frame(api.getSceneElements() as unknown as El[], true);
-          else api.updateScene({ appState: { zoom: { value: Math.min(4, Math.max(0.05, how === 'in' ? zoom * 1.25 : zoom / 1.25)) } } as any });
-        }}
+        onZoom={zoom}
       />
 
       {inboxOpen && captureUrl && (
