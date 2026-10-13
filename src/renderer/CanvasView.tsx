@@ -480,7 +480,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
           initialData={{
             files: Object.fromEntries((restoredFiles ?? []).map(f => [f.id, f])) as any,
             elements: restored ? (restoredScene as any) : undefined,
-            appState: { viewBackgroundColor: '#f8f8f8' },
+            appState: { viewBackgroundColor: '#000000' },
           }}
         />
       </div>

@@ -86,11 +86,11 @@ export const AI_MARK = '✦ ';
 export const WIKI_MARK = 'W · ';
 
 export function clusterLabel(title: string, origin?: 'ai' | 'wiki'): LabelSpec {
-  return { text: (origin === 'ai' ? AI_MARK : origin === 'wiki' ? WIKI_MARK : '') + title.toUpperCase(), fontSize: 16, strokeColor: '#1a1a1a', fontFamily: 2 };
+  return { text: (origin === 'ai' ? AI_MARK : origin === 'wiki' ? WIKI_MARK : '') + title.toUpperCase(), fontSize: 16, strokeColor: cssVar('--color-header-text', '#A8A8A8'), fontFamily: 6 };
 }
 
 export function edgeLabel(text: string): LabelSpec {
-  return { text, fontSize: 14, strokeColor: '#1a1a1a', fontFamily: 2 };
+  return { text, fontSize: 14, strokeColor: cssVar('--color-edge-label', '#8A8A8A'), fontFamily: 6 };
 }
 
 export function captionLabel(text: string): LabelSpec {

@@ -2,6 +2,7 @@
 // logic is testable without Excalidraw's canvas-based measurement.
 
 import type { WebModel } from '../types/web';
+import { cssVar } from './theme';
 import { clusterLabel, fragmentLook, type BoxData, type LabelSpec } from './boxes';
 
 export type El = Record<string, any>;
@@ -121,6 +122,25 @@ export function findFreeSpot(elements: El[], at: { x: number; y: number }, w: nu
   return at;
 }
 
+const LEGACY_INK = '#1a1a1a'; // lines and labels drawn dark for the old light canvas
+
+/** Lines, headers and their labels drawn in the old dark ink get the current (light-on-black) colours. */
+export function relight(scene: El[]): El[] {
+  const byId = new Map(scene.map(e => [e.id as string, e]));
+  const legacy = (e: El) => (e.strokeColor ?? '').toLowerCase() === LEGACY_INK;
+  return scene.map(e => {
+    if (e.isDeleted) return e;
+    if (e.type === 'arrow' && legacy(e)) return { ...e, strokeColor: cssVar('--color-edge-stroke', '#6B6B6B') };
+    if (e.type === 'rectangle' && e.customData?.kind === 'cluster' && legacy(e)) return { ...e, strokeColor: cssVar('--color-header-stroke', '#2E2E2E') };
+    if (e.type === 'text' && e.containerId && legacy(e)) {
+      const owner = byId.get(e.containerId);
+      if (owner?.type === 'arrow') return { ...e, strokeColor: cssVar('--color-edge-label', '#8A8A8A') };
+      if (owner?.customData?.kind === 'cluster') return { ...e, strokeColor: cssVar('--color-header-text', '#A8A8A8') };
+    }
+    return e;
+  });
+}
+
 /** Older saved scenes lack customData; rebuild it from the saved model so they become editable. */
 export function hydrateScene(scene: El[], model: WebModel): El[] {
   const data = new Map<string, BoxData>();
@@ -128,7 +148,7 @@ export function hydrateScene(scene: El[], model: WebModel): El[] {
     data.set(`cluster-${ci}`, { kind: 'cluster', index: ci, title: c.title });
     c.slots.forEach((f, fi) => { if (f) data.set(`frag-${ci}-${fi}`, { kind: 'fragment', cluster: ci, slot: fi, fragment: f }); });
   });
-  return scene.map(e => (data.has(e.id) && !e.customData?.kind ? { ...e, customData: data.get(e.id) } : e));
+  return relight(scene.map(e => (data.has(e.id) && !e.customData?.kind ? { ...e, customData: data.get(e.id) } : e)));
 }
 
 export { fragmentLook, clusterLabel };

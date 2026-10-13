@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addBox, arrowCenterBox, findFreeSpot, hydrateScene, removeBox, updateBox, type El } from '../src/renderer/sceneEdit';
+import { addBox, arrowCenterBox, findFreeSpot, hydrateScene, relight, removeBox, updateBox, type El } from '../src/renderer/sceneEdit';
 import { hitTest } from '../src/renderer/hit';
 import { clusterLabel, fragmentLook } from '../src/renderer/boxes';
 import { WebStore } from '../src/backend/db';
@@ -157,5 +157,28 @@ describe('findFreeSpot', () => {
     expect(boxes.filter(b => !b.isDeleted).every(b => moved.x + 280 <= b.x || b.x + b.width <= moved.x || moved.y + 150 <= b.y || b.y + b.height <= moved.y)).toBe(true);
     const wall = [rect('w', { x: -9999, y: -9999, width: 99999, height: 99999 })];
     expect(findFreeSpot(wall, { x: 5, y: 5 }, 280, 150)).toEqual({ x: 5, y: 5 });
+  });
+});
+
+describe('relight (old dark ink on the new black canvas)', () => {
+  const ink = '#1a1a1a';
+  it('recolours legacy lines, headers and their labels; leaves everything else alone', () => {
+    const scene: El[] = [
+      { id: 'e', type: 'arrow', strokeColor: ink },
+      { id: 'e-label', type: 'text', containerId: 'e', strokeColor: ink },
+      { id: 'h', type: 'rectangle', strokeColor: ink, customData: { kind: 'cluster' } },
+      { id: 'h-label', type: 'text', containerId: 'h', strokeColor: ink },
+      { id: 'card', type: 'rectangle', strokeColor: 'transparent', customData: { kind: 'fragment' } },
+      { id: 'mine', type: 'arrow', strokeColor: '#ff0000' },
+      { id: 'gone', type: 'arrow', strokeColor: ink, isDeleted: true },
+    ];
+    const out = relight(scene);
+    const col = (id: string) => out.find(e => e.id === id)!.strokeColor;
+    for (const id of ['e', 'e-label', 'h', 'h-label']) expect(col(id)).not.toBe(ink);
+    expect(col('e')).toBe('#6B6B6B');            // token fallbacks outside a browser
+    expect(col('card')).toBe('transparent');
+    expect(col('mine')).toBe('#ff0000');
+    expect(col('gone')).toBe(ink);
+    expect(relight(out)).toEqual(out);          // idempotent
   });
 });

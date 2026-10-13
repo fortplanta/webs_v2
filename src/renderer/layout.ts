@@ -10,6 +10,9 @@ import { fanCenters, headerRing, KB_H, KB_W, kbRing, SEED_W } from './layout/org
 import { leash } from './layout/leash';
 import { TETHER_KIND } from './tether';
 import { cssVar } from './theme';
+
+const EDGE = () => cssVar('--color-edge-stroke', '#6B6B6B');
+const HEADER_STROKE = () => cssVar('--color-header-stroke', '#2E2E2E');
 import type { WebModel } from './webModel';
 
 export { FRAG_H, FRAG_W };
@@ -50,7 +53,7 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
     const h = heads[ci];
     out.push({
       type: 'rectangle', id: `cluster-${ci}`, x: h.x - FRAG_W / 2, y: h.y - HEADER_H / 2, width: FRAG_W, height: HEADER_H,
-      strokeColor: '#1a1a1a', backgroundColor: 'transparent', roundness: null,
+      strokeColor: HEADER_STROKE(), backgroundColor: 'transparent', roundness: null,
       ...(originStroke(cluster.origin) ?? {}),
       label: clusterLabel(cluster.title, cluster.origin),
       customData: { kind: 'cluster', index: ci, title: cluster.title, ...(cluster.lens ? { lens: cluster.lens } : {}), ...(cluster.origin ? { origin: cluster.origin } : {}) },
@@ -75,7 +78,7 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
       const dist = Math.hypot(spots[fi].x - h.x, spots[fi].y - h.y);
       arrows.push({
         type: 'arrow', id: `tether-${ci}-${fi}`, x: 0, y: 0, start: { id: `cluster-${ci}` }, end: { id: `frag-${ci}-${fi}` },
-        startArrowhead: null, endArrowhead: null, strokeColor: '#1a1a1a', strokeWidth: 1, strokeStyle: 'dotted', opacity: 55,
+        startArrowhead: null, endArrowhead: null, strokeColor: EDGE(), strokeWidth: 1, strokeStyle: 'dotted', opacity: 55,
         customData: { kind: TETHER_KIND, max: leash(dist) },
       });
     });
@@ -87,12 +90,12 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
     arrows.push({
       type: 'arrow', id: `edge-${i}`, x: 0, y: 0,
       start: { id: `cluster-${edge.source}` }, end: { id: `cluster-${edge.target}` },
-      strokeColor: '#1a1a1a',
+      strokeColor: EDGE(),
       ...(edge.label ? { label: edgeLabel(edge.label) } : {}),
     });
   });
   if (m.clusters.length) {
-    arrows.push({ type: 'arrow', id: 'seed-link', x: 0, y: 0, start: { id: 'seed' }, end: { id: 'cluster-0' }, strokeColor: '#1a1a1a', strokeWidth: 1, opacity: 70 });
+    arrows.push({ type: 'arrow', id: 'seed-link', x: 0, y: 0, start: { id: 'seed' }, end: { id: 'cluster-0' }, strokeColor: EDGE(), strokeWidth: 1, opacity: 70 });
   }
 
   return [...out, ...arrows];

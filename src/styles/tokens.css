@@ -24,9 +24,10 @@
   --size-image-height-small:  200px;
 
   /* ─── Typography ──────────────────────────────────────────── */
-  --font-primary:             "Neue Haas Unica", "Helvetica Neue", Arial, sans-serif;
+  --font-primary:             "Neue Montreal", "Helvetica Neue", Arial, sans-serif;
+  --font-display:             "Denton Condensed", "Neue Montreal", Georgia, serif;
   --font-size-header:         20px;
-  --font-size-body:           16px;
+  --font-size-body:           14px;
   --font-size-tag:            12px;
   --font-size-disclaimer:     11px;
   --font-size-meta:           10px;
@@ -80,34 +81,42 @@
 
   /* ─── Canvas & surfaces ───────────────────────────────────── */
   /* TODO: derive from /skills/ */
-  --color-canvas:                #f8f8f8;
-  --color-canvas-dot:            #cbcbcb;
-  --color-surface:               #ffffff;
+  --color-canvas:                #000000;
+  --color-canvas-dot:            #1B1B1B;
+  --color-surface:               #101010;
+  --color-control-bg:            #19191C;   /* buttons, inputs */
 
   /* ─── Text ────────────────────────────────────────────────── */
   /* TODO: derive from /skills/ */
-  --color-text:                  #000000;
-  --color-text-secondary:        rgba(0, 0, 0, 0.58);
+  --color-text:                  #C4C4C4;
+  --color-text-secondary:        #7A7A7A;
+  --color-on-interactive:        #000000;
 
   /* ─── Edges ───────────────────────────────────────────────── */
-  --color-edge:                  rgba(0, 0, 0, 0.15);
-  --color-edge-midpoint:         rgba(0, 0, 0, 0.3);
+  --color-edge:                  rgba(255, 255, 255, 0.18);
+  --color-edge-midpoint:         rgba(255, 255, 255, 0.3);
+  --color-edge-stroke:           #6B6B6B;   /* lines on the canvas */
+  --color-edge-label:            #8A8A8A;
+  --color-header-stroke:         #2E2E2E;   /* collection header outline */
+  --color-header-text:           #A8A8A8;
 
   /* ─── Semantic UI tokens ─────────────────────────────────── */
-  --color-interactive:      #8A38F5;
-  --color-interactive-dim:  rgba(138, 56, 245, 0.12);
-  --color-error:            #FF0207;
-  --color-error-dim:        rgba(255, 2, 7, 0.12);
-  --color-text-primary:     #000000;
-  --color-text-tertiary:    rgba(0, 0, 0, 0.45);
-  --color-bg-overlay:       rgba(255, 255, 255, 0.97);
-  --color-bg-elevated:      #ffffff;
-  --color-border-default:   rgba(0, 0, 0, 0.1);
-  --color-border-subtle:    rgba(0, 0, 0, 0.04);
+  --color-interactive:      #C4C4C4;
+  --color-interactive-dim:  rgba(196, 196, 196, 0.12);
+  --color-error:            #FF6B6B;
+  --color-error-dim:        rgba(255, 107, 107, 0.14);
+  --color-text-primary:     #F2F2F2;
+  --color-text-tertiary:    #5B5B60;
+  --color-bg-overlay:       rgba(16, 16, 16, 0.94);
+  --color-bg-elevated:      #101010;
+  --color-border-default:   #1B1B1B;
+  --color-border-subtle:    #111111;
+  --color-border-strong:    rgba(255, 255, 255, 0.08);
 
   /* ─── Radius scale ────────────────────────────────────────── */
   --radius-none:  0px;
   --radius-sm:    2px;
+  --radius-control: 10px;   /* buttons, inputs, segmented controls */
   --radius-lg:    12px;
   --radius-full:  9999px;
 
@@ -117,29 +126,29 @@
   /* ─── Neurodive component aliases ────────────────────────── */
   /* Bridge so nd/ components resolve their tokens against webs vars */
   --surface:      var(--color-surface);
-  --surface-alt:  #ededed;
-  --surface-mute: #f7f7f7;
+  --surface-alt:  #19191C;
+  --surface-mute: #0A0A0A;
   --fg:           var(--color-text);
-  --fg-strong:    #0f172a;
-  --fg-2:         rgba(0,0,0,0.65);
-  --fg-3:         rgba(0,0,0,0.45);
-  --fg-4:         rgba(0,0,0,0.25);
-  --fg-invert:    #ffffff;
-  --fg-mute:      rgba(0,0,0,0.41);
-  --hairline:     rgba(0,0,0,0.1);
-  --hairline-2:   rgba(0,0,0,0.04);
+  --fg-strong:    #F2F2F2;
+  --fg-2:         rgba(255,255,255,0.65);
+  --fg-3:         rgba(255,255,255,0.45);
+  --fg-4:         rgba(255,255,255,0.25);
+  --fg-invert:    #000000;
+  --fg-mute:      rgba(255,255,255,0.41);
+  --hairline:     #1B1B1B;
+  --hairline-2:   #111111;
   --radius:       0;
   --radius-soft:  4px;
   --stroke:       1px solid var(--hairline);
   --stroke-soft:  1px solid var(--hairline-2);
-  --shadow-card:    2px 2px 14px 0 rgba(0,0,0,0.07);
-  --shadow-toolbar: 0 4px 6px -2px rgba(0,0,0,0.05), 0 10px 15px -3px rgba(0,0,0,0.10);
-  --shadow-lift:    0 1px 2px 0 rgba(0,0,0,0.05);
+  --shadow-card:    0 0 0 1px #111213, 0 4px 6px -1px rgba(0,0,0,0.5);
+  --shadow-toolbar: 0 0 0 1px #1B1B1B, 0 10px 24px -4px rgba(0,0,0,0.8);
+  --shadow-lift:    0 1px 2px 0 rgba(0,0,0,0.5);
   --ease:       cubic-bezier(0.2, 0, 0.2, 1);
   --dur-fast:   80ms;
   --dur:        140ms;
   --dur-slow:   200ms;
-  --focus-ring: 1px dashed rgb(138,56,245);
+  --focus-ring: 1px dashed rgba(232, 222, 248, 0.5);
   --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
   --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px;
   --s-12: 48px;

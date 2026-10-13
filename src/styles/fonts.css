@@ -1,0 +1,7 @@
+/* Neue Montreal (UI text) and Denton Condensed (display type: the topic, big headings).
+   The same files are what the canvas draws with — see electron.vite.config.ts. */
+@font-face { font-family: "Neue Montreal"; font-weight: 300; font-style: normal; font-display: swap; src: url("../../assets/fonts/NeueMontreal-Light.ttf") format("truetype"); }
+@font-face { font-family: "Neue Montreal"; font-weight: 400; font-style: normal; font-display: swap; src: url("../../assets/fonts/NeueMontreal-Regular.ttf") format("truetype"); }
+@font-face { font-family: "Neue Montreal"; font-weight: 500; font-style: normal; font-display: swap; src: url("../../assets/fonts/NeueMontreal-Medium.ttf") format("truetype"); }
+@font-face { font-family: "Neue Montreal"; font-weight: 700; font-style: normal; font-display: swap; src: url("../../assets/fonts/NeueMontreal-Bold.ttf") format("truetype"); }
+@font-face { font-family: "Denton Condensed"; font-weight: 100 400; font-style: normal; font-display: swap; src: url("../../assets/fonts/DentonCondensedTest-Thin.otf") format("opentype"); }

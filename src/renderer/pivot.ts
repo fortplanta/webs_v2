@@ -4,6 +4,7 @@
 import type { GeneratedFragment } from '../backend/events';
 import { clusterLabel, edgeLabel, fragmentLook, FRAG_H, FRAG_W, HEADER_H } from './boxes';
 import { clusterFootprint, fanCenters, findClusterSpot } from './layout/organic';
+import { cssVar } from './theme';
 import { addBox, updateBox, type Build, type El } from './sceneEdit';
 
 /** KB passages already represented by a card on the canvas — a pivot must not repeat them. */
@@ -57,7 +58,7 @@ export function addPivotCluster(elements: El[], spec: PivotSpec, build: Build): 
     label: clusterLabel(spec.title),
     customData: { kind: 'cluster', index: spec.index, title: spec.title, lens: spec.lens, pivotFrom: spec.fromCardId } as any,
   }, build);
-  out = out.map(e => (e.id === headerId ? { ...e, strokeColor: '#1a1a1a', roundness: null } : e));
+  out = out.map(e => (e.id === headerId ? { ...e, strokeColor: cssVar('--color-header-stroke', '#2E2E2E'), roundness: null } : e));
   const spots = fanCenters(spec.cards.length, { x: spec.x + FRAG_W / 2, y: spec.y + HEADER_H / 2 }, spec.angle ?? 0);
   const cardIds = spec.cards.map((fragment, i) => {
     const id = `${spec.id}-c${i}`;
@@ -117,7 +118,7 @@ export function addThread(
   const arrow = makeArrow({
     type: 'arrow', id: spec.id, x: p1.x, y: p1.y, width: Math.abs(dx), height: Math.abs(dy), points: [[0, 0], [dx, dy]],
     startBinding: { elementId: from.id, focus: 0, gap: 4 }, endBinding: { elementId: to.id, focus: 0, gap: 4 },
-    startArrowhead: null, endArrowhead: 'arrow', strokeColor: '#1a1a1a', strokeWidth: 1, opacity: 70, roundness: null,
+    startArrowhead: null, endArrowhead: 'arrow', strokeColor: cssVar('--color-edge-stroke', '#6B6B6B'), strokeWidth: 1, opacity: 70, roundness: null,
   });
   const bump = (e: El): El => ({ ...e, boundElements: [...(e.boundElements ?? []), { type: 'arrow', id: spec.id }], version: (e.version ?? 0) + 1, versionNonce: Math.floor(Math.random() * 2 ** 31), updated: Date.now() });
   let out = elements.map(e => (e.id === from.id || e.id === to.id ? bump(e) : e));
