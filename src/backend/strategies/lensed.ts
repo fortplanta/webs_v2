@@ -15,9 +15,10 @@ import type { GeneratedFragment, OverviewEdge, WebEvent } from '../events';
 import {
   buildLensedFragmentsMessage, buildLensedOverviewMessage, LENSED_FRAGMENTS_SYSTEM_PROMPT, LENSED_OVERVIEW_SYSTEM_PROMPT, passageIds,
 } from '../prompts';
-import { JsonObjectStream, normalizeFragment, parseLensedOverview } from '../parse';
-import { groundingScore } from '../retrieval/ground';
+import { candidatePairs, checkClaims, checkRetelling, clampWeight, restoreNames, sentenceCase, sharedTerms, weightFor } from '../narration';
+import { cardMeta, JsonObjectStream, parseLensedOverview } from '../parse';
 import type { LibraryRetrieval } from '../library/service';
+import { wikipediaOrigin } from '../library/images';
 import type { Collection, SelectedPassage } from '../retrieval/retrieve';
 import { jaccard, terms } from '../retrieval/text';
 import { aiWeb } from './ai';
@@ -27,17 +28,18 @@ import type { Strategy } from './types';
 const clip = (t: string, n: number) => (t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t);
 const firstWords = (t: string, n: number) => t.split(/\s+/).slice(0, n).join(' ');
 
-export function provisionalFragment(p: SelectedPassage, collection: Collection): GeneratedFragment {
+export function provisionalFragment(p: SelectedPassage, collection: Collection, best = 0): GeneratedFragment {
   return {
     type: 'source',
     title: (p.heading || firstWords(p.text, 5)).toLowerCase(),
-    body: clip(p.text, 400),
+    body: p.text, // the whole passage, never a teaser
     tags: [p.lens],
     bridge: p.via?.length ? `Connected through “${p.via.slice(0, 2).join(', ')}”.` : `Surfaced by the “${collection.label}” route.`,
     kbSources: [p.source],
     kbPassageIds: [p.id],
     grounding: 1,
     lens: p.lens,
+    weight: weightFor(p.score.value, best),
     draft: true,
   };
 }
@@ -102,7 +104,7 @@ export const lensed: Strategy = async function* (ctx) {
 };
 
 /** What marks a card as coming from a reference library rather than the user's notes. */
-interface Marks { origin: 'wiki'; of(p: SelectedPassage): Partial<GeneratedFragment> }
+interface Marks { origin: 'wiki'; of(p: SelectedPassage): Partial<GeneratedFragment>; /** Where this passage's article lives, for fetching its picture. */ article(p: SelectedPassage): { urlBase: string; title: string } | null }
 
 function libraryMarks(lib: LibraryRetrieval): Marks {
   return {
@@ -116,15 +118,60 @@ function libraryMarks(lib: LibraryRetrieval): Marks {
         ...(meta?.urlBase ? { link: meta.urlBase + encodeURIComponent(title.replace(/ /g, '_')) } : {}),
       };
     },
+    article(p) {
+      const i = p.source.indexOf(':');
+      const meta = lib.libraries.get(p.source.slice(0, i));
+      return meta?.urlBase && wikipediaOrigin(meta.urlBase) ? { urlBase: meta.urlBase, title: p.source.slice(i + 1) } : null;
+    },
   };
 }
 
 /** The knowledge-base web: instant skeleton and excerpts, then the local model's cards. `marks` is set for library sources. */
 async function* kbWeb(ctx: Parameters<Strategy>[0], q: string, retrieval: Awaited<ReturnType<Parameters<Strategy>[0]['retriever']['retrieve']>>, marks?: Marks): AsyncGenerator<WebEvent> {
+  // Pictures are fetched alongside the cards, never in front of them.
+  if (marks && ctx.images) yield* interleave(kbCards(ctx, q, retrieval, marks), pictures(ctx, retrieval.collections, marks));
+  else yield* kbCards(ctx, q, retrieval, marks);
+}
+
+/** One picture per article, from its lead image, for the first (heaviest) card that came from it. Three at a time. */
+async function* pictures(ctx: Parameters<Strategy>[0], collections: Collection[], marks: Marks): AsyncGenerator<WebEvent> {
+  const fetchImage = ctx.images!;
+  const chosen = new Map<string, { cluster: number; slot: number; urlBase: string; title: string; weight: number }>();
+  collections.forEach((c, ci) => c.passages.forEach((p, pi) => {
+    const a = marks.article(p);
+    if (!a) return;
+    const weight = p.score.value;
+    const key = `${a.urlBase}${a.title}`;
+    if (!chosen.has(key) || weight > chosen.get(key)!.weight) chosen.set(key, { cluster: ci, slot: pi, ...a, weight });
+  }));
+  const jobs = [...chosen.values()];
+  const running = new Map<number, Promise<{ i: number; ev: WebEvent | null }>>();
+  let next = 0;
+  const launch = () => {
+    while (running.size < 3 && next < jobs.length) {
+      const i = next++, job = jobs[i];
+      running.set(i, fetchImage(job.urlBase, job.title, ctx.signal).then(
+        (image): { i: number; ev: WebEvent | null } => ({ i, ev: image ? { type: 'image', cluster: job.cluster, slot: job.slot, image } : null }),
+        (): { i: number; ev: WebEvent | null } => ({ i, ev: null }), // a picture that can't be fetched is simply absent
+      ));
+    }
+  };
+  launch();
+  while (running.size) {
+    const { i, ev } = await Promise.race(running.values());
+    running.delete(i);
+    if (ev) yield ev;
+    launch();
+  }
+}
+
+async function* kbCards(ctx: Parameters<Strategy>[0], q: string, retrieval: Awaited<ReturnType<Parameters<Strategy>[0]['retriever']['retrieve']>>, marks?: Marks): AsyncGenerator<WebEvent> {
   const collections = retrieval.collections;
   const ids = passageIds(collections);
   const where = new Map<string, { cluster: number; slot: number; p: SelectedPassage }>();
   collections.forEach((c, ci) => c.passages.forEach((p, pi) => where.set(ids[ci][pi], { cluster: ci, slot: pi, p })));
+
+  const bestScore = Math.max(...[...where.values()].map(w => w.p.score.value), 0);
 
   // 2. instant skeleton + excerpt cards (the selected passages ARE the cards, so no separate KB column)
   yield {
@@ -132,7 +179,7 @@ async function* kbWeb(ctx: Parameters<Strategy>[0], q: string, retrieval: Awaite
     clusters: collections.map(c => ({ title: c.label, slots: c.passages.length, lens: c.lens, ...(marks ? { origin: marks.origin } : {}) })),
     edges: defaultEdges(collections),
   };
-  for (const [, w] of where) yield { type: 'fragment', cluster: w.cluster, slot: w.slot, fragment: { ...provisionalFragment(w.p, collections[w.cluster]), ...marks?.of(w.p) } };
+  for (const [, w] of where) yield { type: 'fragment', cluster: w.cluster, slot: w.slot, fragment: { ...provisionalFragment(w.p, collections[w.cluster], bestScore), ...marks?.of(w.p) } };
 
   // 3. the model: overview, then cards (a failure here leaves the KB-derived web on the canvas)
   try {
@@ -151,27 +198,58 @@ async function* kbWeb(ctx: Parameters<Strategy>[0], q: string, retrieval: Awaite
       edges: o.edges.length ? o.edges : defaultEdges(collections),
     };
 
+    // The narrator's first judgement: passages that don't bear on the question are set aside, not forced into the story.
+    const done = new Set<string>();
+    const skipped = o.skip.filter(id => where.has(id));
+    for (const id of skipped) {
+      done.add(id);
+      const w = where.get(id)!;
+      yield { type: 'fragment', cluster: w.cluster, slot: w.slot, fragment: { ...provisionalFragment(w.p, collections[w.cluster], bestScore), ...marks?.of(w.p), dropped: true } };
+    }
+    if (skipped.length) yield { type: 'status', message: `Set aside ${skipped.length} passage${skipped.length === 1 ? '' : 's'} that didn't fit the question…` };
+
+    const pairs = candidatePairs([...where].filter(([id]) => !done.has(id)).map(([id, w]) => ({ id, terms: w.p.terms })), retrieval.terms);
+
     yield { type: 'status', message: 'Writing cards…' };
     const parser = new JsonObjectStream();
-    const done = new Set<string>();
     const stream = ctx.llm.stream(
-      { system: LENSED_FRAGMENTS_SYSTEM_PROMPT, user: buildLensedFragmentsMessage(q, o.context, collections), maxTokens: 4500 },
+      { system: LENSED_FRAGMENTS_SYSTEM_PROMPT, user: buildLensedFragmentsMessage(q, o.context, collections, skipped, pairs), maxTokens: 6000 },
       ctx.signal,
     );
     for await (const chunk of stream) {
       for (const obj of parser.feed(chunk)) {
-        const f = normalizeFragment(obj);
-        if (!f) continue;
-        const open = [...where].filter(([id]) => !done.has(id)).map(([id, w]) => ({ id, p: w.p }));
         const named = String((obj as any).passage ?? '').toUpperCase().replace(/[^P0-9]/g, '');
-        const hit = open.find(c => c.id === named) ?? bestPassage(`${f.title} ${f.body}`, open);
+        if ((obj as any).fits === false && where.has(named) && !done.has(named)) {
+          done.add(named);
+          const w = where.get(named)!;
+          yield { type: 'fragment', cluster: w.cluster, slot: w.slot, fragment: { ...provisionalFragment(w.p, collections[w.cluster], bestScore), ...marks?.of(w.p), dropped: true } };
+          continue;
+        }
+        const meta = cardMeta(obj);
+        if (!meta) continue;
+        const open = [...where].filter(([id]) => !done.has(id)).map(([id, w]) => ({ id, p: w.p }));
+        const hit = open.find(c => c.id === named) ?? bestPassage(`${meta.title} ${meta.bridge ?? ''}`, open);
         if (!hit) continue;
         done.add(hit.id);
         const w = where.get(hit.id)!;
-        const bridge = typeof (obj as any).bridge === 'string' ? clip((obj as any).bridge.trim(), 200) : undefined;
+        // The narrator's words are used only if they pass the no-invention check; otherwise the passage itself stays.
+        const hook = meta.bridge && checkClaims(meta.bridge, w.p.text, q).ok ? meta.bridge : undefined;
+        const title = checkClaims(meta.title, w.p.text, q).ok ? meta.title : (w.p.heading.length >= 12 ? w.p.heading : firstWords(w.p.text, 5).toLowerCase());
+        const retelling = meta.retelling ? restoreNames(sentenceCase(meta.retelling), w.p.text) : undefined;
+        const verdict = retelling ? checkRetelling(w.p.text, retelling, q) : null;
+        const retold = !!(retelling && verdict?.ok);
+        // a link is believable only if the two passages really share vocabulary beyond the question itself
+        const relates = (meta.relates ?? [])
+          .filter(r => r.to !== hit.id && where.has(r.to) && sharedTerms(w.p.terms, where.get(r.to)!.p.terms, retrieval.terms) >= 3)
+          .map(r => ({ to: where.get(r.to)!.p.id, verb: r.verb }));
         const fragment: GeneratedFragment = {
-          ...f, bridge: bridge || undefined, kbSources: [w.p.source], kbPassageIds: [w.p.id], lens: w.p.lens,
-          grounding: groundingScore(`${f.title} ${f.body}`, w.p.terms, retrieval.terms),
+          type: meta.type, title, ...(meta.tags ? { tags: meta.tags } : {}), ...(hook ? { bridge: hook } : {}),
+          body: retold ? retelling! : w.p.text,
+          ...(retold ? { retold: true, original: w.p.text } : {}),
+          ...(verdict && !verdict.ok ? { retellingRefused: verdict.reason } : {}),
+          weight: clampWeight(meta.weight) ?? weightFor(w.p.score.value, bestScore),
+          ...(relates.length ? { relates } : {}),
+          kbSources: [w.p.source], kbPassageIds: [w.p.id], lens: w.p.lens, grounding: 1,
           ...marks?.of(w.p),
         };
         yield { type: 'fragment', cluster: w.cluster, slot: w.slot, fragment };

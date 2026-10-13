@@ -9,11 +9,10 @@ import { WebsError } from './errors';
 import type { GeneratedFragment, PivotEvent, PivotRequest } from './events';
 import type { LlmService } from './llm';
 import { ollamaLlm } from './llm';
-import { JsonObjectStream, normalizeFragment, parseJsonObject } from './parse';
+import { cardMeta, JsonObjectStream, parseJsonObject } from './parse';
 import {
   buildPivotFragmentsMessage, buildPivotOverviewMessage, LENSED_FRAGMENTS_SYSTEM_PROMPT, PIVOT_OVERVIEW_SYSTEM_PROMPT, passageIds,
 } from './prompts';
-import { groundingScore } from './retrieval/ground';
 import type { Collection, Retrieval } from './retrieval/retrieve';
 import { kbRetriever, type Retriever } from './retrieval/service';
 import { jaccard, terms } from './retrieval/text';
@@ -58,22 +57,18 @@ async function* run(req: PivotRequest, opts: Required<PivotOptions>): AsyncGener
     const stream = opts.llm.stream({ system: LENSED_FRAGMENTS_SYSTEM_PROMPT, user: buildPivotFragmentsMessage(card, title, collection), maxTokens: 3000 }, opts.signal);
     for await (const chunk of stream) {
       for (const obj of parser.feed(chunk)) {
-        const f = normalizeFragment(obj);
-        if (!f) continue;
+        const meta = cardMeta(obj);
+        if (!meta) continue;
         const open = collection.passages.map((p, i) => ({ p, i })).filter(x => !done.has(x.i));
         const named = ids.indexOf(String((obj as any).passage ?? '').toUpperCase().replace(/[^P0-9]/g, ''));
         let hit = open.find(x => x.i === named);
         if (!hit) {
-          const t = new Set(terms(`${f.title} ${f.body}`));
+          const t = new Set(terms(`${meta.title} ${meta.bridge ?? ''}`));
           hit = open.map(x => ({ x, s: jaccard(t, new Set(x.p.terms)) })).sort((a, b) => b.s - a.s).find(y => y.s > 0.05)?.x;
         }
         if (!hit) continue;
         done.add(hit.i);
-        const bridge = typeof (obj as any).bridge === 'string' ? (obj as any).bridge.trim().slice(0, 200) : undefined;
-        const fragment: GeneratedFragment = {
-          ...f, bridge: bridge || undefined, kbSources: [hit.p.source], kbPassageIds: [hit.p.id], lens: hit.p.lens,
-          grounding: groundingScore(`${f.title} ${f.body}`, hit.p.terms, retrieval.terms),
-        };
+        const fragment: GeneratedFragment = { ...meta, body: hit.p.text, kbSources: [hit.p.source], kbPassageIds: [hit.p.id], lens: hit.p.lens, grounding: 1 };
         yield { type: 'card', slot: hit.i, fragment };
       }
     }

@@ -238,3 +238,8 @@ a { color: var(--color-text); }
 .palette-hint { font-size: var(--font-size-tag); color: #5B5B60; }
 .palette-item.active .palette-hint { color: #555; }
 .palette-empty { padding: 20px 8px; text-align: center; color: var(--color-text-secondary); }
+
+.tl-body { white-space: pre-line; }
+
+.original-text { margin: 6px 0; white-space: pre-wrap; color: var(--color-text-secondary); font-size: var(--font-size-tag); line-height: 1.45; }
+.editor details summary { cursor: pointer; margin-top: 4px; }

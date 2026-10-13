@@ -8,13 +8,14 @@ import type { WebConfig } from '../config';
 import { getSettings } from '../settings';
 import { fileKb, type KbService } from '../kb';
 import { ollamaLlm, type LlmService } from '../llm';
+import { fetchLeadImage } from '../library/images';
 import { libraryRetriever, type LibraryRetriever } from '../library/service';
 import { aiContext } from '../provider';
 import { kbRetriever, type Retriever } from '../retrieval/service';
 import type { AiContext } from './ai';
 import { lensed } from './lensed';
 import { progressive } from './progressive';
-import type { Strategy } from './types';
+import type { Strategy, StrategyContext } from './types';
 
 export const strategies: Record<string, Strategy> = { lensed, progressive };
 
@@ -25,6 +26,8 @@ export interface RunOptions {
   kb?: KbService;
   retriever?: Retriever;
   llm?: LlmService;
+  /** Override picture fetching (tests); `null` = none. */
+  images?: StrategyContext['images'];
   /** Override the reference libraries (tests); `null` = none. */
   library?: LibraryRetriever | null;
   /** Override the AI provider (tests); `null` = none. */
@@ -49,6 +52,7 @@ export async function* runStrategy(query: string, opts: RunOptions): AsyncGenera
       retriever: opts.retriever ?? kbRetriever,
       llm: opts.llm ?? ollamaLlm,
       library: opts.library !== undefined ? opts.library : libraryRetriever,
+      images: opts.images !== undefined ? opts.images : getSettings().images.wikipedia ? fetchLeadImage : null,
       ai: opts.ai !== undefined ? opts.ai : aiContext(),
     });
     yield { type: 'done' };

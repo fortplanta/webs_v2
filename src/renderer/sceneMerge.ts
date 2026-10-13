@@ -80,5 +80,5 @@ export function mergeScene(prev: readonly El[], next: El[], applied: Map<string,
 }
 
 function isGenerated(id: string): boolean {
-  return /^(seed|seed-sub|seed-link|kb-\d+|cluster-\d+|frag-\d+-\d+(-title|-foot)?|tether-\d+-\d+|edge-\d+)(-label)?$/.test(id);
+  return /^(seed|seed-sub|seed-link|kb-\d+|cluster-\d+|frag-\d+-\d+(-title|-foot|-dot)?|rel-\d+-\d+-\d+|tether-\d+-\d+|edge-\d+)(-label)?$/.test(id);
 }

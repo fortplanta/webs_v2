@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { cardFooter } from './card';
-import { clip } from './boxes';
 import { layoutTimeline, yearLabel, type TimelineCard } from './timeline';
 
 export interface TimelineViewProps {
@@ -22,8 +21,8 @@ function Card({ card, year, inferred, style, onOpen }: { card: TimelineCard; yea
   return (
     <button className={`tl-card${f.origin ? ` ${f.origin}` : ''}`} style={style} onClick={() => onOpen(card.id, 'fragment')}>
       {year !== undefined && <span className="tl-year">{yearLabel(year)}{inferred ? ' · from the text' : ''}</span>}
-      <span className="tl-title">{clip(f.title, 40)}</span>
-      <span className="tl-body">{clip(f.body, 170)}</span>
+      <span className="tl-title">{f.title}</span>
+      <span className="tl-body">{f.body}</span>
       <span className="tl-foot">{cardFooter(f)}</span>
     </button>
   );

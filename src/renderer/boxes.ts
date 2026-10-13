@@ -39,6 +39,11 @@ export function wrap(text: string, max: number): string {
   return lines.join('\n');
 }
 
+/** Wrap each paragraph (line) separately, so a passage's own line breaks and list items survive. */
+export function wrapParagraphs(text: string, max: number): string {
+  return text.split('\n').map(line => (line.trim() ? wrap(line, max) : '')).join('\n');
+}
+
 export function clip(text: string, maxChars: number): string {
   return text.length > maxChars ? text.slice(0, maxChars - 1).trimEnd() + '…' : text;
 }
@@ -96,11 +101,4 @@ export function edgeLabel(text: string): LabelSpec {
 
 export function captionLabel(text: string): LabelSpec {
   return { text, fontSize: 12, strokeColor: cssVar('--color-image-card-caption', '#525252'), fontFamily: 2, textAlign: 'center', verticalAlign: 'bottom' };
-}
-
-/** Outline that tells AI-written boxes apart from ones built from the user's notes. */
-export function originStroke(origin?: 'ai' | 'wiki'): { strokeColor: string; strokeStyle: 'dashed' | 'solid'; strokeWidth: number } | null {
-  if (origin === 'ai') return { strokeColor: '#4a4a4a', strokeStyle: 'dashed', strokeWidth: 1 };
-  if (origin === 'wiki') return { strokeColor: '#2f5d9e', strokeStyle: 'solid', strokeWidth: 2 };
-  return null;
 }

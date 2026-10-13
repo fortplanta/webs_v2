@@ -117,8 +117,9 @@ Override with `WEBS_DB` (database file) and `WEBS_KB_DIR` (KB folder). The KB fo
 in Settings. A library saved by earlier builds (in `~/Library/Application Support/webs-v1a`) is copied
 across once on first launch; the original is left untouched.
 
-The app's only outbound calls are to your Ollama, your capture service and AI provider (if you set them up), and
-GitHub (the update check); fonts are bundled.
+The app's only outbound calls are to your Ollama, your capture service and AI provider (if you set them up), GitHub
+(the update check) and, for pictures on Wikipedia cards, wikipedia.org (switch off in Settings → Libraries); fonts are
+bundled.
 
 ## How generation works
 
@@ -129,11 +130,33 @@ GitHub (the update check); fonts are bundled.
   passage relates to the topic from cue words, and a bridge route follows ideas shared with the best
   matches to passages that don't mention the topic at all.
 - Selection is set-level: the anchor first, then whatever adds the most to what's already chosen.
-- Every card records its note, route, and a grounding score; cards that go beyond the note are flagged.
+- Every card records its note, route and a grounding score.
 
 All weights and thresholds are in `retrieval/config.ts`; the lenses in `retrieval/lenses.ts`. The
 strategy is pluggable (`src/backend/strategies/`); the simpler `progressive` strategy is kept for
 comparison and can be selected in Settings.
+
+### The narrator
+
+The passages appear on the canvas straight away, whole. Then a **narrator** (your local model, in a curious,
+informal, not-highbrow voice; see `backend/narration.ts`) reads what was found like an editor: it **judges** each
+passage and sets aside the ones that merely share a keyword with the question, finds the **through-line** (shown under
+the topic), names the collections, gives each card a title and a one-sentence hook, says how important each card is
+(its size and brightness) and how cards **relate** (labelled arrows between cards), and **retells** each passage in its
+voice.
+
+It is not allowed to make anything up. Everything it writes is checked against the source before it is used: a
+retelling is accepted only if it adds no number or name that isn't in the passage, keeps every number and name that
+is, and is about as long as the original (no teasers); a title or hook with a new name or number is replaced; a link
+between cards survives only if the two passages share real vocabulary. Anything that fails the check is dropped and
+the original passage stays. A retold card says so in its footer, and its editor shows the original passage and a
+"Use the original wording" button. Cards always show their text in full; a card grows to fit it.
+
+### Pictures
+
+Cards from a Wikipedia library get their article's lead picture (Simple English first, then the English article of
+the same name), fetched in the background and placed beside the card with a link back to its source. They are
+saved with the web, so they work offline afterwards.
 
 ## Browser capture (optional)
 

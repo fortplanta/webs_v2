@@ -70,6 +70,11 @@
   --color-card-title:   #C4C4C4;
   --color-card-body:    #8C8C8C;
   --color-card-foot:    #5B5B60;
+  --color-card-title-hi: #F2F2F2;   /* the heart of the story */
+  --color-card-body-hi:  #B4B4B4;
+  --color-card-title-lo: #8C8C8C;   /* supporting detail */
+  --color-card-body-lo:  #5F5F5F;
+  --color-relation-stroke: #9A9A9A; /* arrows between cards */
 
   /* ─── Image card (component: customData.kind === 'image-card') ── */
   --color-image-card-bg:       #101010;

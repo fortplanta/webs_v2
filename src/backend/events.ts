@@ -4,6 +4,7 @@
 
 import type { FragmentType } from '../types/fragments';
 import type { WebsErrorCode } from './errors';
+import type { WebImage } from './library/images';
 
 export interface KbPassage {
   source: string; // path relative to the KB dir
@@ -38,6 +39,18 @@ export interface GeneratedFragment {
   lens?: string;
   /** A placeholder built straight from a KB passage, awaiting the model's card. */
   draft?: boolean;
+  /** The source passage as retrieved, when `body` is the narrator's retelling of it (it passed the no-invention check). */
+  original?: string;
+  /** True when `body` is a retelling. Absent/false: `body` is the source text itself. */
+  retold?: boolean;
+  /** Why a retelling was not used, if the narrator offered one and it was refused. */
+  retellingRefused?: string;
+  /** The narrator judged this passage not to bear on the question; it is set aside (not drawn) rather than forced into the story. */
+  dropped?: boolean;
+  /** 1–3: how much this card matters to the story (its size and brightness on the canvas). */
+  weight?: 1 | 2 | 3;
+  /** How this card relates to others, by their passage ids: "led to", "contradicts"… Drawn as labelled arrows. */
+  relates?: Array<{ to: string; verb: string }>;
   /** Where the content comes from. Absent = your own notes; 'wiki' = an offline reference library (Wikipedia…); 'ai' = your AI provider's own knowledge. */
   origin?: 'ai' | 'wiki';
   /** For origin 'wiki': the library's name, e.g. "Simple English Wikipedia". */
@@ -59,6 +72,8 @@ export type WebEvent =
   | { type: 'fragment'; cluster: number; slot: number; fragment: GeneratedFragment }
   /** Collections written by the user's AI provider, from index `start` on (0 when the KB found nothing). */
   | { type: 'ai-outline'; start: number; context: string; clusters: Array<{ title: string; slots: number }>; edges: OverviewEdge[]; model: string }
+  /** A picture for the card at (cluster, slot), fetched in the background; the canvas places it beside the card. */
+  | { type: 'image'; cluster: number; slot: number; image: WebImage }
   /** Something went wrong with an optional part (e.g. the AI top-up); the web carries on without it. */
   | { type: 'warning'; message: string }
   | { type: 'done' }

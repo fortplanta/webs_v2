@@ -165,3 +165,14 @@ export async function contentId(blob: Blob): Promise<string> {
 export function describeResize(name: string, from: { bytes: number; width: number; height: number }, to: { bytes: number; width: number; height: number }): string {
   return `Resized ${name}: ${formatBytes(from.bytes)} → ${formatBytes(to.bytes)} (${from.width}×${from.height} → ${to.width}×${to.height}).`;
 }
+
+
+/** A data: URL as a Blob, without fetch() (this app's content-security policy only lets fetch reach its own origin). */
+export function dataUrlToBlob(dataURL: string): Blob {
+  const comma = dataURL.indexOf(',');
+  const mime = /^data:([^;,]+)/.exec(dataURL)?.[1] ?? 'application/octet-stream';
+  const bin = atob(dataURL.slice(comma + 1));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}

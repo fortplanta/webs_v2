@@ -152,9 +152,9 @@ describe('runPivot', () => {
     expect(cancelled.map(e => e.type)).toEqual(['plan', 'status']); // no error, no done
   });
 
-  it('ties a card to its passage by content when the model gives a wrong id', async () => {
+  it('ties a card to its passage by what the model says about it when it gives a wrong id', async () => {
     const c = await picked();
-    const llm: LlmService = { ...goodLlm(), async *stream() { yield JSON.stringify({ passage: 'P99', type: 'concept', title: 'x', body: c.passages[0].text, bridge: 'b' }) + '\n'; } };
+    const llm: LlmService = { ...goodLlm(), async *stream() { yield JSON.stringify({ passage: 'P99', type: 'concept', title: 'x', bridge: c.passages[0].text.split('. ')[0] }) + '\n'; } };
     const evs = await collect(llm);
     const card0 = evs.find(e => e.type === 'card') as Extract<PivotEvent, { type: 'card' }>;
     expect(card0.fragment.kbSources?.[0]).toBe(c.passages[0].source);

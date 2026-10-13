@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Excalidraw, restoreElements, viewportCoordsToSceneCoords } from '@excalidraw/excalidraw';
 import type { BinaryFileData, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import '@excalidraw/excalidraw/index.css';
-import type { GeneratedFragment, PivotEvent } from '../backend/events';
+import type { GeneratedFragment, PivotEvent, WebEvent } from '../backend/events';
 import type { InboxItem } from '../types/capture';
 import type { SavedFile } from '../types/ipc';
 import { captionLabel, clusterLabel, edgeLabel, FRAG_H, FRAG_W, GAP, HEADER_H } from './boxes';
@@ -19,10 +19,10 @@ import { addImageCard, imageCardLayout, type ImageCardData } from './imageCard';
 import { addPivotCluster, addThread, pivotFootprint, placePivot, threadLabelBox, usedPassageIds } from './pivot';
 import { addTether, removeTether, tetherOf } from './tether';
 import { revealView } from './viewport';
-import { blobToDataURL, contentId, describeResize, ImageImportError, imageTypeOf, looksLikeImage, prepareImage } from './images';
+import { blobToDataURL, contentId, dataUrlToBlob, describeResize, ImageImportError, imageTypeOf, looksLikeImage, prepareImage } from './images';
 import { buildSkeletons } from './layout';
 import { convertWithStableIds, mergeScene } from './sceneMerge';
-import { addBox, arrowCenterBox, findFreeSpot, removeBox, updateBox, type El } from './sceneEdit';
+import { addBox, arrowCenterBox, dropOrphanPictures, findFreeSpot, removeBox, updateBox, type El } from './sceneEdit';
 import type { WebModel } from './webModel';
 
 interface Props {
@@ -39,6 +39,8 @@ interface Props {
   view?: 'cluster' | 'timeline';
   /** Lets the command palette ask the canvas for its commands (add, zoom, jump to a card…). */
   registerCommands?: (provider: (() => Command[]) | null) => void;
+  /** Lets the generation hand pictures to the canvas as they are fetched. */
+  registerImageSink?: (sink: ((ev: Extract<WebEvent, { type: 'image' }>) => void) | null) => void;
 }
 
 type Editing =
@@ -59,8 +61,11 @@ const emptyInbox: InboxState = { items: [], unsupported: 0, error: null, busy: f
 const isEditable = (t: EventTarget | null) => t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 const build = (skeletons: unknown[]) => convertWithStableIds(skeletons) as El[];
 const makeArrow = (raw: El): El => restoreElements([raw as any], null)[0] as unknown as El;
+const makeImage = makeArrow; // same restore step for images
+/** Longest side of a fetched picture on the canvas. */
+const PICTURE_SIDE = 200;
 
-export function CanvasView({ webId, model, restoredScene, restoredFiles, onSceneChange, view = 'cluster', registerCommands }: Props) {
+export function CanvasView({ webId, model, restoredScene, restoredFiles, onSceneChange, view = 'cluster', registerCommands, registerImageSink }: Props) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
   const [captureUrl, setCaptureUrl] = useState('');
@@ -91,7 +96,9 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   useEffect(() => {
     if (!api || restored) return;
     const next = convertWithStableIds(buildSkeletons(model));
-    const { elements, signatures } = mergeScene(api.getSceneElements() as any, next, applied.current);
+    const merged = mergeScene(api.getSceneElements() as any, next, applied.current);
+    const { signatures } = merged;
+    const elements = dropOrphanPictures(merged.elements as El[]);
     applied.current = signatures;
     api.updateScene({ elements: elements as any });
     setTouched(true); // fresh generations settle themselves from the start
@@ -515,6 +522,30 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     api.updateScene({ appState: selectionFor(id) as any });
     api.scrollToContent(el as any, { animate: true, fitToViewport: false });
   }
+
+  /** A picture fetched for a library card: saved with the web, placed beside its card on the side away from the middle, and tethered to it. */
+  const pictureQueue = useRef<Promise<void>>(Promise.resolve());
+  function placePicture(ev: Extract<WebEvent, { type: 'image' }>) {
+    pictureQueue.current = pictureQueue.current.then(async () => {
+      if (!api) return;
+      const card = byId(`frag-${ev.cluster}-${ev.slot}`), id = `wimg-${ev.cluster}-${ev.slot}`;
+      if (!card || byId(id)) return; // the card was set aside or deleted, or already has its picture
+      const { image } = ev;
+      const blob = dataUrlToBlob(image.dataURL);
+      const fileId = await contentId(blob);
+      api.addFiles([{ id: fileId as BinaryFileData['id'], mimeType: image.mimeType as BinaryFileData['mimeType'], dataURL: image.dataURL as BinaryFileData['dataURL'], created: Date.now() }]);
+      const lay = imageCardLayout(image.width, image.height, PICTURE_SIDE);
+      const x = card.x + card.width / 2 >= 0 ? card.x + card.width + 28 : card.x - lay.width - 28;
+      const placed = addImageCard(scene(), { id, x, y: card.y, maxSide: PICTURE_SIDE, data: { fileId, caption: image.caption, name: image.caption, width: image.width, height: image.height, link: image.link } }, build, makeImage);
+      apply(addTether(placed.elements, card.id, id, makeArrow, 560));
+    }).catch(err => { console.warn('Could not place a picture:', err); /* it is simply absent */ });
+  }
+  const placeRef = useRef(placePicture);
+  placeRef.current = placePicture;
+  useEffect(() => {
+    registerImageSink?.(ev => placeRef.current(ev));
+    return () => registerImageSink?.(null);
+  }, []);
 
   // The command palette asks for these when it opens, so they always reflect the current scene and selection.
   const buildCommands = (): Command[] => {

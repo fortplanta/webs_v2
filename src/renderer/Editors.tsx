@@ -85,6 +85,14 @@ export function FragmentEditor({ fragment, onChange, onDelete, onClose, onPivot,
       <label>How it connects <span className="meta">the bridge to the topic</span>
         <input value={fragment.bridge ?? ''} onChange={e => set({ bridge: e.target.value || undefined })} />
       </label>
+      {fragment.retold && fragment.original && (
+        <div className="hint ai-note">
+          Retold in the narrator's voice. Every name and number was checked against the source, and nothing was added.
+          <details><summary>Original passage</summary><div className="original-text">{fragment.original}</div></details>
+          <button className="plain-link" onClick={() => set({ body: fragment.original!, original: undefined, retold: false })}>Use the original wording</button>
+        </div>
+      )}
+      {fragment.retellingRefused && <div className="hint">Kept the original wording: the narrator's retelling was refused because {fragment.retellingRefused}.</div>}
       {fragment.origin === 'wiki' && (
         <div className="hint ai-note">W From {fragment.sourceLabel ?? 'an offline reference library'}{fragment.kbSources?.[0] ? ` — “${fragment.kbSources[0]}”` : ''}. Not from your notes.</div>
       )}
@@ -250,7 +258,7 @@ export function ImageCardEditor({ data, onCaption, onDelete, onClose, stick }: {
         <input ref={ref} value={caption} onChange={e => { setCaption(e.target.value); onCaption(e.target.value); }} onKeyDown={e => { if (e.key === 'Enter') onClose(); }} />
       </label>
       <div className="hint">
-        {data.name} · {data.width}×{data.height}
+        {data.link ? <>From <a href={data.link} target="_blank" rel="noreferrer">{data.name}</a> · </> : <>{data.name} · </>}{data.width}×{data.height}
         {data.resizedFrom && <> · shrunk from {data.resizedFrom.width}×{data.resizedFrom.height} ({formatBytes(data.resizedFrom.bytes)}); your original file is untouched</>}
       </div>
       <StickRow stick={stick} />

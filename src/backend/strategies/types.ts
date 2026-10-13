@@ -3,6 +3,7 @@ import type { WebEvent } from '../events';
 import type { KbService } from '../kb';
 import type { LlmService } from '../llm';
 import type { Retriever } from '../retrieval/service';
+import type { WebImage } from '../library/images';
 import type { LibraryRetriever } from '../library/service';
 import type { AiContext } from './ai';
 
@@ -15,6 +16,8 @@ export interface StrategyContext {
   llm: LlmService;
   /** Offline reference libraries (Wikipedia, …), consulted when the notes have nothing. */
   library: LibraryRetriever | null;
+  /** Fetches an article's picture (Wikipedia libraries only); null when switched off. */
+  images: ((urlBase: string, title: string, signal: AbortSignal) => Promise<WebImage | null>) | null;
   /** The user's own AI provider, when set up. */
   ai: AiContext | null;
 }

@@ -35,6 +35,8 @@ export interface LibraryInfo {
 export interface Settings {
   /** Big offline reference libraries (Wikipedia, …): the second tier, consulted when your notes have nothing. */
   library: { dir: string; disabled: string[] };
+  /** Pictures for cards from a Wikipedia library (the only thing that goes online besides Ollama, your AI provider and update checks). */
+  images: { wikipedia: boolean };
   ai: AiSettings;
   ollama: { baseUrl: string; model: string; idleTimeoutSec: number };
   kb: { dir: string; disabledModules: string[] };

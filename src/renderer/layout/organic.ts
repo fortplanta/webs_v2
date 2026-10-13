@@ -48,18 +48,18 @@ export function fanAngles(k: number): number[] {
   return Array.from({ length: k }, (_, j) => (j - (k - 1) / 2) * step);
 }
 
-/** Card centers for a header at `from`, fanning toward `angle` (degrees). */
-export function fanCenters(k: number, from: Pt, angle: number): Pt[] {
-  const dist = FAN_DIST + 60 * Math.max(0, k - 3);
+/** Card centers for a header at `from`, fanning toward `angle` (degrees). Taller cards (`cardH`) are placed further out. */
+export function fanCenters(k: number, from: Pt, angle: number, cardH: number = FRAG_H): Pt[] {
+  const dist = FAN_DIST + 60 * Math.max(0, k - 3) + Math.max(0, cardH - FRAG_H) * 0.6;
   return fanAngles(k).map(o => ({ x: from.x + Math.cos(rad(angle + o)) * dist, y: from.y + Math.sin(rad(angle + o)) * dist }));
 }
 
 export interface Rect { x: number; y: number; width: number; height: number }
 
 /** Bounding box (absolute) of a header at `from` and its `k` fanned cards. */
-export function clusterFootprint(k: number, from: Pt, angle: number): Rect {
+export function clusterFootprint(k: number, from: Pt, angle: number, cardH: number = FRAG_H): Rect {
   const rects: Rect[] = [{ x: from.x - FRAG_W / 2, y: from.y - HEADER_H / 2, width: FRAG_W, height: HEADER_H },
-    ...fanCenters(k, from, angle).map(c => ({ x: c.x - FRAG_W / 2, y: c.y - FRAG_H / 2, width: FRAG_W, height: FRAG_H }))];
+    ...fanCenters(k, from, angle, cardH).map(c => ({ x: c.x - FRAG_W / 2, y: c.y - cardH / 2, width: FRAG_W, height: cardH }))];
   const x0 = Math.min(...rects.map(r => r.x)), y0 = Math.min(...rects.map(r => r.y));
   return { x: x0, y: y0, width: Math.max(...rects.map(r => r.x + r.width)) - x0, height: Math.max(...rects.map(r => r.y + r.height)) - y0 };
 }

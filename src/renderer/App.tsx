@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { WebEvent } from '../backend/events';
 import type { SavedFile, SavedWebSummary } from '../types/ipc';
 import { CanvasView } from './CanvasView';
 import { CommandPalette } from './CommandPalette';
@@ -33,6 +34,7 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [bundle, setBundle] = useState<SettingsBundle | null>(null);
   const canvasCommands = useRef<(() => Command[]) | null>(null);
+  const imageSink = useRef<((ev: Extract<WebEvent, { type: 'image' }>) => void) | null>(null);
 
   const cancel = useRef<(() => void) | null>(null);
   const modelRef = useRef<WebModel | null>(null);
@@ -94,6 +96,7 @@ export function App() {
         return;
       }
       if (!modelRef.current || idRef.current !== id) return;
+      if (ev.type === 'image') { imageSink.current?.(ev); return; } // pictures go straight onto the canvas
       setCurrent(reduce(modelRef.current, ev));
       if (ev.type === 'done' || ev.type === 'error') saveModelNow(); else saveModelSoon();
     });
@@ -161,7 +164,7 @@ export function App() {
             </>
           )}
         </TopBar>
-        <CanvasView key={webId} webId={webId} model={model} restoredScene={restoredScene} restoredFiles={restoredFiles} onSceneChange={onSceneChange} view={view} registerCommands={p => { canvasCommands.current = p; }} />
+        <CanvasView key={webId} webId={webId} model={model} restoredScene={restoredScene} restoredFiles={restoredFiles} onSceneChange={onSceneChange} view={view} registerCommands={p => { canvasCommands.current = p; }} registerImageSink={f => { imageSink.current = f; }} />
       </div>
     );
   }

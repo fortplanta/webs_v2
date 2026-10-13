@@ -87,6 +87,7 @@ Rules:
 
 // ── "lensed" strategy: the passages are chosen by retrieval; the model only titles and writes ──────────
 
+import { NARRATOR_VOICE } from './narration';
 import type { Collection } from './retrieval/retrieve';
 
 const clip = (t: string, n: number) => (t.length > n ? t.slice(0, n - 1).trimEnd() + '…' : t);
@@ -97,12 +98,12 @@ export function passageIds(collections: Collection[]): string[][] {
   return collections.map(c => c.passages.map(() => `P${++n}`));
 }
 
-function renderCollections(collections: Collection[]): string {
+function renderCollections(collections: Collection[], full = false): string {
   const ids = passageIds(collections);
-  return collections.map((c, ci) => `Collection ${ci} — ${c.label}\n` + c.passages.map((p, pi) => `  [${ids[ci][pi]}] (${p.source}${p.heading ? ` · ${p.heading}` : ''}${p.via ? ` · reached through "${p.via.slice(0, 3).join(', ')}"` : ''})\n  ${clip(p.text, 900)}`).join('\n')).join('\n\n');
+  return collections.map((c, ci) => `Collection ${ci} — ${c.label}\n` + c.passages.map((p, pi) => `  [${ids[ci][pi]}] (${p.source}${p.heading ? ` · ${p.heading}` : ''}${p.via ? ` · reached through "${p.via.slice(0, 3).join(', ')}"` : ''})\n  ${full ? p.text : clip(p.text, 900)}`).join('\n')).join('\n\n');
 }
 
-export const LENSED_OVERVIEW_SYSTEM_PROMPT = `You are a knowledge canvas planner. You are given a topic and collections of passages from the user's knowledge base, each collection reached by a different route. You name the collections and describe how they relate.
+export const LENSED_OVERVIEW_SYSTEM_PROMPT = `You are the narrator of a knowledge canvas. You are given a question and collections of passages from the user's own sources, each collection reached by a different route. Your job is to see what the pieces add up to: find the pattern, decide the through-line, and name each collection. ${NARRATOR_VOICE}
 
 ${JSON_ONLY} Your response must start with { and end with }.`;
 
@@ -114,39 +115,47 @@ ${renderCollections(collections)}
 Return ONLY valid JSON matching this exact shape:
 
 {
-  "context": "2-3 sentences grounding the topic, using only what the passages say",
-  "clusters": [ { "title": "2-4 words naming what this collection shows about the topic" } ],
+  "context": "the through-line: 2-4 sentences in your voice on how these pieces add up to the question, using only what the passages say",
+  "verdicts": { "P1": "fits", "P2": "off-topic" },
+  "clusters": [ { "title": "2-4 words, in your voice, naming what this collection shows about the question" } ],
   "edges": [ { "source": 0, "target": 1, "label": "verb phrase" } ]
 }
 
 Rules:
+- First judge EVERY passage and give a verdict for each id in "verdicts": "fits" or "off-topic". A passage fits only if it is really about the question's subject. It does NOT fit just because it shares a word with the question ("true", "scientist", "find") while being about something else, like a film, a recipe or an animal. Be strict: an honest short story beats a stretched long one.
+- Build the through-line and titles from the passages you did not skip.
 - Exactly ${collections.length} clusters, in the same order as the collections above.
 - "source" and "target" are 0-based collection indexes. Connect collection 0 to each of the others, and add a link between two others only when the passages clearly support it.
 - Edge labels are verb phrases, not nouns: "led to", "put to use in", "contested by".
-- Use only the passages above; do not add outside facts.
+- Use only the passages above. Do not add facts, names, dates or numbers that are not in them; you are connecting what is there, not extending it.
 - Return raw JSON only. Start with { and end with }.`;
 }
 
-export const LENSED_FRAGMENTS_SYSTEM_PROMPT = `You are a knowledge canvas writer. You turn passages from the user's knowledge base into short cards, one JSON object per line, and you never go beyond what the passages say.
+export const LENSED_FRAGMENTS_SYSTEM_PROMPT = `You are the narrator of a knowledge canvas, now at the card level. For each passage you give a title, a one-sentence hook, a retelling of the passage in your voice, and how it relates to other passages. ${NARRATOR_VOICE}
+
+THE RULE THAT MATTERS MOST: you never make anything up. A retelling says exactly what the passage says — every fact, name, date and number it contains, and nothing it doesn't. It may reword, reorder and connect, and it must cover the whole passage (no teasers, no summaries that leave things out). If you are not sure, copy the passage's own wording.
 
 CRITICAL: Output ONLY JSON objects, one per line (JSON Lines). No array wrapper. No markdown code fences. No preamble. No commentary.`;
 
-export function buildLensedFragmentsMessage(query: string, context: string, collections: Collection[]): string {
+export function buildLensedFragmentsMessage(query: string, context: string, collections: Collection[], skip: string[] = [], pairs: Array<{ a: string; b: string; shared: string[] }> = []): string {
   const ids = passageIds(collections);
-  return `Topic: "${query}"
-Overview: ${context}
+  return `Question: "${query}"
+The through-line so far: ${context}
 
-${renderCollections(collections)}
+${renderCollections(collections, true)}
+${skip.length ? `\nAlready set aside as not fitting (do not output them): ${skip.join(', ')}\n` : ''}${pairs.length ? `\nPassages that share vocabulary, so a link between them might be real (use them for "relates" only if it truly is): ${pairs.map(p => `${p.a}~${p.b} (${p.shared.slice(0, 4).join(', ')})`).join('; ')}\n` : ''}
+For every passage, in order (${ids.flat().filter(id => !skip.includes(id)).join(', ')}), give one JSON object per line:
 
-Write exactly one card for every passage, in order (${ids.flat().join(', ')}), one JSON object per line:
-
-{"passage": "P1", "type": "person | concept | thesis | source | event | era | domain | quote", "title": "card title (2-5 words, lowercase)", "body": "2-3 sentences", "bridge": "one sentence on how this connects to the topic", "tags": ["tag1", "tag2"]}
+{"passage": "P1", "fits": true, "type": "person | concept | thesis | source | event | era | domain | quote", "title": "2-6 words, in your voice, lowercase", "hook": "one sentence on why this matters for the question", "weight": 3, "relates": [{"to": "P3", "verb": "led to"}], "tags": ["tag1", "tag2"], "retelling": "the whole passage, retold in your voice"}
 
 Rules:
-- "passage" is the id of the passage the card is based on. Use each id once.
-- "body" restates what that passage says. Do not add facts, names, dates or numbers that are not in the passage.
-- "bridge" names the idea that connects this card to the topic "${query}" (for passages reached through an idea, name that idea). One sentence.
-- Choose "type" by what the card actually is: person, concept, thesis (a contested claim), source (a document or reference), event, era, domain, or quote (verbatim text from the passage only).
+- "passage" is the id of the passage. Use each id once.
+- "fits" is false if the passage doesn't actually help answer the question; then give only {"passage": "P4", "fits": false}. Don't force a connection.
+- "retelling" is in normal sentence case (capital letters at the start of sentences and for names). It keeps EVERY fact, name and number in the passage and adds none, and it is about as long as the passage: do not shorten it into a summary. If the passage is a list, keep it a list.
+- "title" and "hook" may use only names and numbers that appear in the passage or the question.
+- "weight" is 1, 2 or 3: how central this passage is to the through-line (3 = the heart of it, 1 = supporting detail).
+- "relates" is optional: up to 2 links to OTHER passages when one clearly led to, caused, answers, contradicts or builds on the other, preferably from the vocabulary-sharing pairs listed above. "to" is a passage id; "verb" is a short verb phrase. Leave it out when unsure.
+- "type": person, concept, thesis (a contested claim), source (a document or reference), event, era, domain, or quote (verbatim text).
 - "tags": 2-4 lowercase words. Omit for quotes.
 - Output JSON Lines only. Each object on its own line.`;
 }
@@ -186,15 +195,15 @@ New collection: "${title}", exploring a different angle on that card.
 
 ${renderCollections([collection])}
 
-Write exactly one card for every passage, in order (${ids.flat().join(', ')}), one JSON object per line:
+For every passage, in order (${ids.flat().join(', ')}), give one JSON object per line:
 
-{"passage": "P1", "type": "person | concept | thesis | source | event | era | domain | quote", "title": "card title (2-5 words, lowercase)", "body": "2-3 sentences", "bridge": "one sentence on how this connects to the source card", "tags": ["tag1", "tag2"]}
+{"passage": "P1", "type": "person | concept | thesis | source | event | era | domain | quote", "title": "card title (2-5 words, lowercase)", "bridge": "one sentence on how this connects to the source card", "tags": ["tag1", "tag2"]}
 
 Rules:
-- "passage" is the id of the passage the card is based on. Use each id once.
-- "body" restates what that passage says. Do not add facts, names, dates or numbers that are not in the passage.
-- "bridge" names the idea that connects this card to the source card "${card.title}". One sentence.
-- Choose "type" by what the card actually is: person, concept, thesis (a contested claim), source (a document or reference), event, era, domain, or quote (verbatim text from the passage only).
+- "passage" is the id of the passage the card is for. Use each id once.
+- Do NOT include the passage text or a summary of it; it is shown on the card as it is.
+- "bridge" names the idea that connects this passage to the source card "${card.title}". One sentence.
+- Choose "type" by what the passage actually is: person, concept, thesis (a contested claim), source (a document or reference), event, era, domain, or quote (verbatim text).
 - "tags": 2-4 lowercase words. Omit for quotes.
 - Output JSON Lines only. Each object on its own line.`;
 }
@@ -237,7 +246,7 @@ ${numbered}
 
 Write exactly ${perCollection} cards for each collection, collection 0 first, one JSON object per line:
 
-{"cluster": 0, "type": "person | concept | thesis | source | event | era | domain | quote", "title": "card title (2-5 words, lowercase)", "body": "2-3 sentences", "bridge": "one sentence on how this connects to the topic", "tags": ["tag1", "tag2"]}
+{"cluster": 0, "type": "person | concept | thesis | source | event | era | domain | quote", "title": "card title (2-5 words, lowercase)", "body": "a full paragraph of 4-6 sentences", "bridge": "one sentence on how this connects to the topic", "tags": ["tag1", "tag2"]}
 
 Rules:
 - "cluster" is the 0-based collection index from the list above.

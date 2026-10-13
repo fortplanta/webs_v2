@@ -3,7 +3,7 @@
 
 import type { GeneratedFragment } from '../backend/events';
 import { clusterLabel, edgeLabel, FRAG_H, FRAG_W, HEADER_H } from './boxes';
-import { addCard } from './card';
+import { addCard, cardSize } from './card';
 import { clusterFootprint, fanCenters, findClusterSpot } from './layout/organic';
 import { cssVar } from './theme';
 import { addBox, updateBox, type Build, type El } from './sceneEdit';
@@ -34,8 +34,8 @@ export function placePivot(elements: El[], sourceId: string, cards = 3): { x: nu
 }
 
 /** The area a pivot of `cards` cards will cover, for bringing it into view. */
-export function pivotFootprint(pos: { x: number; y: number; angle: number }, cards: number) {
-  return clusterFootprint(cards, { x: pos.x + FRAG_W / 2, y: pos.y + HEADER_H / 2 }, pos.angle);
+export function pivotFootprint(pos: { x: number; y: number; angle: number }, cards: number, cardH = FRAG_H) {
+  return clusterFootprint(cards, { x: pos.x + FRAG_W / 2, y: pos.y + HEADER_H / 2 }, pos.angle, cardH);
 }
 
 export interface PivotSpec {
@@ -60,11 +60,13 @@ export function addPivotCluster(elements: El[], spec: PivotSpec, build: Build): 
     customData: { kind: 'cluster', index: spec.index, title: spec.title, lens: spec.lens, pivotFrom: spec.fromCardId } as any,
   }, build);
   out = out.map(e => (e.id === headerId ? { ...e, strokeColor: cssVar('--color-header-stroke', '#2E2E2E'), roundness: null } : e));
-  const spots = fanCenters(spec.cards.length, { x: spec.x + FRAG_W / 2, y: spec.y + HEADER_H / 2 }, spec.angle ?? 0);
+  const sizes = spec.cards.map(cardSize);
+  const tall = Math.max(...sizes.map(z => z.height), FRAG_H);
+  const spots = fanCenters(spec.cards.length, { x: spec.x + FRAG_W / 2, y: spec.y + HEADER_H / 2 }, spec.angle ?? 0, tall);
   const cardIds = spec.cards.map((fragment, i) => {
     const id = `${spec.id}-c${i}`;
     out = addCard(out, {
-      id, x: spots[i].x - FRAG_W / 2, y: spots[i].y - FRAG_H / 2, fragment,
+      id, x: spots[i].x - sizes[i].width / 2, y: spots[i].y - sizes[i].height / 2, fragment,
       customData: { kind: 'fragment', cluster: spec.index, slot: i, fragment },
     }, build);
     return id;

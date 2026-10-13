@@ -214,6 +214,10 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
                 {l.label} <span className="meta">{l.articles.toLocaleString()} articles · {(l.bytes / 1e9 >= 1 ? `${(l.bytes / 1e9).toFixed(1)} GB` : `${Math.round(l.bytes / 1e6)} MB`)}</span>
               </label>
             ))}
+            <label className="check">
+              <input type="checkbox" checked={draft.images.wikipedia} onChange={e => set('images', 'wikipedia', e.target.checked)} />
+              Show pictures on Wikipedia cards (fetched from wikipedia.org in the background, then saved with the web)
+            </label>
             <div className="hint">Add one with <code>npm run library:import -- &lt;dump.xml.bz2&gt;</code> (see the README); libraries are read from <code>{draft.library.dir || 'the libraries folder'}</code>.</div>
           </fieldset>
 

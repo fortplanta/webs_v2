@@ -162,7 +162,7 @@ describe('groundingScore', () => {
 describe('parseLensedOverview', () => {
   it('maps titles by index, pads missing ones, and keeps only valid labelled edges', () => {
     const o = parseLensedOverview(JSON.stringify({ context: ' c ', clusters: [{ title: 'A' }, { title: ' ' }], edges: [{ source: 0, target: 1, label: 'led to' }, { source: 0, target: 9, label: 'x' }, { source: 1, target: 1, label: 'self' }, { source: 0, target: 2, label: '' }] }), 3);
-    expect(o).toEqual({ context: 'c', titles: ['A', null, null], edges: [{ source: 0, target: 1, label: 'led to' }] });
+    expect(o).toEqual({ context: 'c', titles: ['A', null, null], edges: [{ source: 0, target: 1, label: 'led to' }], skip: [] });
   });
 });
 
@@ -217,18 +217,26 @@ describe('lensed strategy', () => {
     expect(overviews[1].edges).toEqual([{ source: 0, target: 1, label: 'led to' }]);
   });
 
-  it('flags cards that go beyond their passage', async () => {
+  it('shows the passage in full as the card body, whatever the model writes', async () => {
     const llm: LlmService = { ...goodLlm(), async *stream() { yield JSON.stringify({ passage: 'P1', type: 'concept', title: 'x', body: 'A sailor from Norway sailed to Mars in 1903.', bridge: 'b' }) + '\n'; } };
     const evs = await collect(llm);
     const w = (evs.filter(e => e.type === 'fragment') as any[]).find(f => f.fragment.bridge === 'b');
-    expect(w.fragment.grounding).toBeLessThan(0.4);
+    expect(w.fragment.body).toBe(picked()[0].text);        // the passage, not the model's version
+    expect(w.fragment.body).not.toContain('Mars');
+    expect(w.fragment.grounding).toBe(1);
   });
 
-  it('ties a card to its passage by content when the model gives a wrong id', async () => {
+  it('never clips a passage: even before the model, the excerpt card carries all of it', async () => {
+    const evs = await collect({ call: async () => { throw new Error('offline'); }, async *stream() { /* none */ } } as LlmService);
+    const excerpts = (evs.filter(e => e.type === 'fragment') as any[]).map(f => f.fragment);
+    for (const f of excerpts) expect(picked().some(p => p.text === f.body)).toBe(true);
+  });
+
+  it('ties a card to its passage by what the model says about it when the id is wrong', async () => {
     const target = picked().find(p => p.source === 'tech/widget.md')!;
-    const llm: LlmService = { ...goodLlm(), async *stream() { yield JSON.stringify({ passage: 'P99', type: 'concept', title: 'a card', body: target.text, bridge: 'wrongid' }) + '\n'; } };
+    const llm: LlmService = { ...goodLlm(), async *stream() { yield JSON.stringify({ passage: 'P99', type: 'concept', title: 'a card', bridge: target.text.split('. ')[0] }) + '\n'; } };
     const evs = await collect(llm);
-    const w = (evs.filter(e => e.type === 'fragment') as any[]).find(f => f.fragment.bridge === 'wrongid');
+    const w = (evs.filter(e => e.type === 'fragment') as any[]).find(f => f.fragment.bridge?.startsWith(target.text.slice(0, 20)));
     expect(w.fragment.kbSources[0]).toBe(target.source);
   });
 

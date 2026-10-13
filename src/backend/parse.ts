@@ -57,6 +57,29 @@ export function normalizeFragment(raw: any): GeneratedFragment | null {
   return { ...rest, type: GENERATED_TYPES.includes(raw.type) ? raw.type : 'concept' };
 }
 
+/**
+ * What the model contributes to a card built from a passage: its kind, a title, tags and the bridge sentence. The body
+ * is not the model's to write — it is the passage itself, shown in full (see lensed.ts).
+ */
+export interface CardMeta { fits?: boolean; type: FragmentType; title: string; tags?: string[]; bridge?: string; weight?: 1 | 2 | 3; retelling?: string; relates?: Array<{ to: string; verb: string }> }
+
+export function cardMeta(raw: any): CardMeta | null {
+  if (!raw || typeof raw.title !== 'string' || !raw.title.trim()) return null;
+  const bridge = (typeof raw.hook === 'string' ? raw.hook : typeof raw.bridge === 'string' ? raw.bridge : '').trim().slice(0, 300);
+  const tags = Array.isArray(raw.tags) ? raw.tags.map(String).filter(Boolean).slice(0, 4) : [];
+  const retelling = typeof raw.retelling === 'string' ? raw.retelling.trim() : '';
+  const relates = (Array.isArray(raw.relates) ? raw.relates : [])
+    .map((r: any) => ({ to: String(r?.to ?? '').toUpperCase().replace(/[^P0-9]/g, ''), verb: String(r?.verb ?? '').trim().slice(0, 40) }))
+    .filter((r: { to: string; verb: string }) => r.to && r.verb).slice(0, 3);
+  const weight = Number(raw.weight);
+  return {
+    ...(raw.fits === false ? { fits: false } : {}),
+    type: GENERATED_TYPES.includes(raw.type) ? raw.type : 'concept', title: raw.title.trim(),
+    ...(tags.length ? { tags } : {}), ...(bridge ? { bridge } : {}), ...(retelling ? { retelling } : {}),
+    ...(relates.length ? { relates } : {}), ...(weight === 1 || weight === 2 || weight === 3 ? { weight: weight as 1 | 2 | 3 } : {}),
+  };
+}
+
 export interface Overview {
   context: string;
   titles: string[];
@@ -86,7 +109,7 @@ function resolveIndex(ref: unknown, titles: string[]): number {
 }
 
 /** Overview for the lensed strategy: one title per collection (by index) and edges between collections. */
-export function parseLensedOverview(raw: string, count: number): { context: string; titles: Array<string | null>; edges: OverviewEdge[] } {
+export function parseLensedOverview(raw: string, count: number): { context: string; titles: Array<string | null>; edges: OverviewEdge[]; skip: string[] } {
   const data = parseJsonObject(raw);
   const clusters: unknown[] = Array.isArray(data?.clusters) ? data.clusters : [];
   const titles = Array.from({ length: count }, (_, i) => {
@@ -97,5 +120,10 @@ export function parseLensedOverview(raw: string, count: number): { context: stri
   const edges: OverviewEdge[] = (Array.isArray(data?.edges) ? data.edges : [])
     .map((e: any) => ({ source: Number(e?.source), target: Number(e?.target), label: String(e?.label ?? '').trim() }))
     .filter((e: OverviewEdge) => Number.isInteger(e.source) && Number.isInteger(e.target) && e.source >= 0 && e.target >= 0 && e.source < count && e.target < count && e.source !== e.target && e.label);
-  return { context: String(data?.context ?? '').trim(), titles, edges };
+  const fromList = (Array.isArray(data?.skip) ? data.skip : []).map((x: unknown) => String(x).toUpperCase().replace(/[^P0-9]/g, '')).filter(Boolean);
+  // a verdict for every passage ({"P1": "fits", "P2": "off-topic"}) makes the model actually look at each one
+  const verdicts = data?.verdicts && typeof data.verdicts === 'object' ? Object.entries(data.verdicts as Record<string, unknown>) : [];
+  const fromVerdicts = verdicts.filter(([, v]) => /^(off|no|skip|irrelevant|not)/i.test(String(v))).map(([id]) => id.toUpperCase().replace(/[^P0-9]/g, ''));
+  const skip = [...new Set([...fromList, ...fromVerdicts])];
+  return { context: String(data?.context ?? '').trim(), titles, edges, skip };
 }

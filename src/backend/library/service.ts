@@ -9,6 +9,7 @@ import { getSettings } from '../settings';
 import { PassageIndex } from '../retrieval/index';
 import { defaultRetrieveConfig, type RetrieveConfig } from '../retrieval/config';
 import { retrieve, type Retrieval } from '../retrieval/retrieve';
+import { terms } from '../retrieval/text';
 import { LibraryDb, type LibraryMeta } from './store';
 
 /** Candidate passages pulled from each library before retrieval picks the best. */
@@ -62,6 +63,15 @@ export const libraryRetriever: LibraryRetriever = {
         id: passageKey(meta.name, h.title, h.seq, h.id), source: `${meta.name}:${h.title}`, module: meta.name, heading: h.heading, text: h.text,
       })));
       if (!entries.length) return null;
+      // A passage must really be about the question: it should contain most of the query's words, not just one common one.
+      const want = [...new Set(terms(query))];
+      const need = want.length <= 2 ? want.length : Math.ceil(want.length * 0.6);
+      const about = entries.filter(e => {
+        const has = new Set(terms(`${e.source.split(':')[1] ?? ''} ${e.heading} ${e.text}`));
+        return want.filter(t => has.has(t)).length >= need;
+      });
+      if (!about.length) return null;
+      entries.splice(0, entries.length, ...about);
       const cfg: RetrieveConfig = { ...defaultRetrieveConfig, clusterCount: generation.clusterCount, fragmentsPerCluster: generation.fragmentsPerCluster };
       const retrieval = retrieve(PassageIndex.fromEntries(entries), query, cfg);
       return { retrieval, libraries: new Map(open.map(o => [o.meta.name, o.meta])) };

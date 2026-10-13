@@ -16,6 +16,7 @@ export function defaultSettings(): Settings {
   const idleMs = Number(process.env.WEBS_LLM_IDLE_TIMEOUT_MS);
   return {
     library: { dir: process.env.WEBS_LIBRARY_DIR?.trim() || '', disabled: [] },
+    images: { wikipedia: true },
     // On by default, with the free local Ollama: when your notes and libraries have nothing (or too little), it answers.
     ai: { enabled: true, kind: 'ollama', baseUrl: '', model: '', apiKey: '', topUp: true },
     ollama: {
@@ -52,6 +53,7 @@ export function getSettingsOverrides(): SettingsPatch {
 export function mergeSettings(base: Settings, patch: SettingsPatch): Settings {
   return {
     library: { ...base.library, ...patch.library },
+    images: { ...base.images, ...patch.images },
     ai: { ...base.ai, ...patch.ai },
     ollama: { ...base.ollama, ...patch.ollama },
     kb: { ...base.kb, ...patch.kb },
@@ -61,7 +63,7 @@ export function mergeSettings(base: Settings, patch: SettingsPatch): Settings {
 }
 
 export function mergePatches(a: SettingsPatch, b: SettingsPatch): SettingsPatch {
-  return { library: { ...a.library, ...b.library }, ai: { ...a.ai, ...b.ai }, ollama: { ...a.ollama, ...b.ollama }, kb: { ...a.kb, ...b.kb }, generation: { ...a.generation, ...b.generation }, capture: { ...a.capture, ...b.capture } };
+  return { library: { ...a.library, ...b.library }, images: { ...a.images, ...b.images }, ai: { ...a.ai, ...b.ai }, ollama: { ...a.ollama, ...b.ollama }, kb: { ...a.kb, ...b.kb }, generation: { ...a.generation, ...b.generation }, capture: { ...a.capture, ...b.capture } };
 }
 
 /** The effective settings, with the API key unsealed. Backend use only: the renderer gets `publicSettings`. */
@@ -87,6 +89,8 @@ const intIn = (v: unknown, min: number, max: number): v is number =>
 export function validatePatch(patch: SettingsPatch, strategies: string[]): Validated {
   const value: SettingsPatch = {};
   const errors: SettingsErrors = {};
+
+  if (patch.images) value.images = patch.images.wikipedia !== undefined ? { wikipedia: !!patch.images.wikipedia } : {};
 
   if (patch.library) {
     const l: NonNullable<SettingsPatch['library']> = {};
