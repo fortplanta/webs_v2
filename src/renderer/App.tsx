@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SavedFile, SavedWebSummary } from '../types/ipc';
 import { CanvasView } from './CanvasView';
 import { SettingsView } from './SettingsView';
+import { TopBar, type View } from './TopBar';
 import { UpdateBanner } from './Updates';
 import { hydrateScene } from './sceneEdit';
 import { initialModel, progress, reduce, type WebModel } from './webModel';
@@ -25,6 +26,7 @@ export function App() {
   const [restoredFiles, setRestoredFiles] = useState<SavedFile[]>([]);
   const [library, setLibrary] = useState<SavedWebSummary[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  const [view, setView] = useState<View>('cluster');
 
   const cancel = useRef<(() => void) | null>(null);
   const modelRef = useRef<WebModel | null>(null);
@@ -117,17 +119,15 @@ export function App() {
     const running = model.phase === 'running';
     return (
       <div className="screen">
-        <div className="bar">
-          <button onClick={back}>← Library</button>
-          <span className="q">{model.query}</span>
-          {running && (
-            <span className="status">
-              <span className="dot" />
-              {model.status}
-              {total > 0 && ` ${filled}/${total}`}
-            </span>
-          )}
-          {running && <button onClick={stop}>Stop</button>}
+        <TopBar
+          title={model.query}
+          status={running ? `${model.status}${total > 0 ? ` ${filled}/${total}` : ''}` : undefined}
+          onBack={back}
+          onStop={running ? stop : undefined}
+          view={view}
+          onView={setView}
+          onSettings={() => setShowSettings(true)}
+        >
           {model.warning && <span className="hint" role="status">{model.warning}</span>}
           {model.phase === 'error' && (
             <>
@@ -135,7 +135,7 @@ export function App() {
               <button onClick={() => start(model.query)}>Retry</button>
             </>
           )}
-        </div>
+        </TopBar>
         <CanvasView key={webId} webId={webId} model={model} restoredScene={restoredScene} restoredFiles={restoredFiles} onSceneChange={onSceneChange} />
       </div>
     );

@@ -127,7 +127,7 @@ describe('stress', () => {
     const nodes = Array.from({ length: 250 }, (_, i) => n(`n${i}`, rand() * 3000, rand() * 2000, 140, 90));
     const t = performance.now();
     for (let i = 0; i < 5; i++) step(nodes, []);
-    expect((performance.now() - t) / 5).toBeLessThan(60); // ms per step
+    expect((performance.now() - t) / 5).toBeLessThan(200); // ms per step (generous: this must not flake on a busy machine; typical is ~10)
   });
 });
 

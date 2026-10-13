@@ -6,6 +6,7 @@ import type { GeneratedFragment, PivotEvent } from '../backend/events';
 import type { InboxItem } from '../types/capture';
 import type { SavedFile } from '../types/ipc';
 import { captionLabel, clusterLabel, edgeLabel, FRAG_H, FRAG_W, GAP, HEADER_H } from './boxes';
+import { BottomToolbar } from './BottomToolbar';
 import { addCard, updateCard } from './card';
 import { fragmentFromCapture, fragmentFromPaste, looksLikeExcalidrawClipboard } from './capture';
 import { ClusterEditor, EdgeEditor, FragmentEditor, ImageCardEditor, InboxPanel, type StickProps } from './Editors';
@@ -491,20 +492,28 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
         />
       </div>
 
-      <div className="canvas-tools">
-        <button onClick={addFreeFragment} disabled={!api}>＋ Fragment</button>
-        <button className="secondary" onClick={() => fileInput.current?.click()} disabled={!api}>＋ Image</button>
-        {sticking && <><span className="hint">Click the card or label it should stay near</span><button className="secondary" onClick={() => setSticking(null)}>Cancel</button></>}
-        {pivot && <><span className="hint">Exploring · {pivot.status}</span><button className="secondary" onClick={stopPivot}>Stop</button></>}
-        <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={e => { const f = [...(e.target.files ?? [])]; e.target.value = ''; void importImages(f); }} />
-        {captureUrl && <button className="secondary" onClick={() => { setInboxOpen(o => !o); void refreshInbox(); }} aria-pressed={inboxOpen}>Inbox{inbox.items.length > 0 ? ` (${inbox.items.length})` : ''}</button>}
-        {(() => {
+      <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={e => { const f = [...(e.target.files ?? [])]; e.target.value = ''; void importImages(f); }} />
+      <BottomToolbar
+        disabled={!api}
+        onFragment={addFreeFragment}
+        onImage={() => fileInput.current?.click()}
+        inbox={captureUrl ? { count: inbox.items.length, open: inboxOpen, onToggle: () => { setInboxOpen(o => !o); void refreshInbox(); } } : undefined}
+        chips={[
+          ...(sticking ? [{ text: 'Click the card or label it should stay near', action: { label: 'Cancel', run: () => setSticking(null) } }] : []),
+          ...(pivot ? [{ text: `Exploring · ${pivot.status}`, action: { label: 'Stop', run: stopPivot } }] : []),
+        ]}
+        legend={(() => {
           const has = (o: 'ai' | 'wiki') => model.clusters.some(c => c.origin === o || c.slots.some(f => f?.origin === o));
           const parts = [!model.clusters.every(c => c.origin) && '▤ your notes', has('wiki') && 'W Wikipedia', has('ai') && '✦ AI'].filter(Boolean);
-          return parts.length > 1 || has('ai') || has('wiki') ? <span className="hint legend" title="Where each card's content comes from: your notes (no outline), Wikipedia and other offline libraries (solid blue outline), your AI provider (dashed outline)">{parts.join(' · ')}</span> : null;
+          return parts.length > 1 || has('ai') || has('wiki') ? parts.join(' · ') : null;
         })()}
-        <span className="hint">Double-click a card or connection to edit · paste or drop text, links and images</span>
-      </div>
+        onZoom={how => {
+          if (!api) return;
+          const zoom = api.getAppState().zoom.value;
+          if (how === 'fit') frame(api.getSceneElements() as unknown as El[], true);
+          else api.updateScene({ appState: { zoom: { value: Math.min(4, Math.max(0.05, how === 'in' ? zoom * 1.25 : zoom / 1.25)) } } as any });
+        }}
+      />
 
       {inboxOpen && captureUrl && (
         <InboxPanel

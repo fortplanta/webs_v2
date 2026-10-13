@@ -132,3 +132,68 @@ a { color: var(--color-text); }
 }
 .canvas .excalidraw .Island, .canvas .excalidraw .zoom-actions, .canvas .excalidraw .undo-redo-buttons { color: var(--color-text); }
 .canvas .excalidraw .HintViewer, .canvas .excalidraw .HintViewer span { color: var(--color-text-secondary); }
+
+/* ── Top bar (Neuros) ─────────────────────────────────────────────────────────────────────────────────────────── */
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: var(--spacing-base); min-height: 56px; padding: 0 var(--spacing-base) 0 var(--spacing-sm); background: var(--color-canvas); border-bottom: 1px solid var(--color-border-subtle); position: relative; z-index: 20; }
+.topbar-left, .topbar-right { display: flex; align-items: center; gap: var(--spacing-sm); min-width: 0; }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0 !important; border-radius: var(--radius-control); background: var(--color-control-bg) !important; outline: 1px solid var(--color-border-strong) !important; outline-offset: -1px; color: var(--color-text) !important; cursor: pointer; border: 0; }
+.icon-btn:hover { background: #232328 !important; }
+.tab { display: flex; align-items: center; gap: var(--spacing-sm); height: 32px; padding: 0 12px; min-width: 0; border-radius: var(--radius-control); background: var(--color-control-bg); outline: 1px solid var(--color-border-strong); outline-offset: -1px; color: var(--color-text); font-weight: 500; }
+.tab-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38vw; }
+.tab-status { display: inline-flex; align-items: center; gap: 6px; color: var(--color-text-secondary); font-size: var(--font-size-tag); font-weight: 400; white-space: nowrap; }
+.tab .dot { width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--color-interactive); animation: pulse 1s ease-in-out infinite; }
+.tab-stop { font: inherit; font-size: var(--font-size-tag); background: none !important; outline: 0 !important; border: 0; padding: 0 !important; min-height: 0 !important; color: var(--color-text) !important; text-decoration: underline; cursor: pointer; }
+.topbar .error { margin: 0; }
+
+.segmented { display: flex; align-items: center; padding: 2px; border-radius: var(--radius-control); background: rgba(234, 221, 255, 0.15); }
+.segmented button { font: inherit; font-weight: 500; min-height: 29px; padding: 4px 8px; border: 0; border-radius: var(--radius-control); background: transparent; color: #5B5B60; cursor: pointer; outline: 0; }
+.segmented button.on { background: #C4C4C4; color: #000; filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.1)); }
+.segmented button:not(.on):hover:not(:disabled) { color: var(--color-text); }
+.segmented button:disabled { cursor: default; opacity: 0.6; }
+
+.split { position: relative; display: flex; align-items: stretch; }
+.split > button, .more-btn { font: inherit; font-weight: 500; min-height: 32px; border: 0; background: #19191C; color: var(--color-text); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.split-main { padding: 0 10px; border-radius: 10px 0 0 10px; outline: 1px solid rgba(232, 222, 248, 0.08); outline-offset: -1px; }
+.split-more { min-width: 32px; padding: 0 8px; border-radius: 0 10px 10px 0; border-left: 1px solid rgba(232, 222, 248, 0.08) !important; outline: 1px solid rgba(232, 222, 248, 0.08); outline-offset: -1px; }
+.split > button:hover, .more-btn:hover { background: #232328; }
+
+/* ── Menus ────────────────────────────────────────────────────────────────────────────────────────────────────── */
+.menu { position: absolute; z-index: 30; min-width: 300px; padding: 4px; background: var(--color-surface); border-radius: 12px; box-shadow: var(--shadow-toolbar); }
+.models-menu { top: calc(100% + 6px); right: 0; }
+.more-menu { bottom: calc(100% + 8px); right: 0; min-width: 280px; }
+.menu-label { padding: 8px 8px 4px; font-size: var(--font-size-tag); color: #4E4E4E; }
+.menu-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--color-text); font: inherit; text-align: left; cursor: pointer; }
+.menu-item:hover { background: #232328; }
+.menu-item[aria-checked=true] .menu-text { color: var(--color-text-primary); }
+.menu-check { display: inline-flex; width: 20px; justify-content: center; color: var(--color-text-secondary); }
+.menu-text { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.menu-detail { overflow: hidden; text-overflow: ellipsis; }
+.menu-detail { color: var(--color-text-secondary); font-size: var(--font-size-tag); }
+.menu-key { color: #5B5B60; font-size: var(--font-size-tag); }
+.menu-sep { height: 1px; margin: 4px 0; background: var(--color-border-default); }
+.menu-note { padding: 6px 8px; font-size: var(--font-size-tag); color: var(--color-text-secondary); line-height: 1.4; }
+
+/* ── Bottom toolbar ───────────────────────────────────────────────────────────────────────────────────────────── */
+.bottombar { position: absolute; left: 50%; bottom: 32px; transform: translateX(-50%); z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 8px; max-width: 92vw; }
+.bottombar-row { display: flex; align-items: center; gap: 24px; }
+.tool-group { display: flex; align-items: center; gap: 1px; }
+.tool { position: relative; width: 36px; height: 36px; padding: 0 !important; display: inline-flex; align-items: center; justify-content: center; border: 0; background: #19191C !important; color: var(--color-text) !important; outline: 1px solid rgba(255, 255, 255, 0.08) !important; outline-offset: -1px; cursor: pointer; min-height: 0 !important; }
+.tool-group .tip:first-child .tool { border-radius: 10px 0 0 10px; }
+.tool-group .tip:last-child .tool { border-radius: 0 10px 10px 0; }
+.tool-group .tip:only-child .tool { border-radius: 10px; }
+.tool:hover:not(:disabled) { background: #232328 !important; }
+.tool.on { background: #2A2A2F !important; }
+.tool .badge { position: absolute; top: 3px; right: 3px; min-width: 14px; height: 14px; border-radius: 7px; background: var(--color-interactive); color: #000; font-size: 9px; line-height: 14px; text-align: center; }
+.more { position: relative; }
+.more-btn { padding: 0 10px 0 14px; border-radius: 10px; outline: 1px solid rgba(255, 255, 255, 0.08); outline-offset: -1px; }
+.tip { position: relative; display: inline-flex; }
+.tip::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); padding: 3px 8px; border-radius: 6px; background: #2B2B2E; color: var(--color-text); font-size: var(--font-size-tag); white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
+.tip:hover::after { opacity: 1; }
+.bar-chip { display: flex; align-items: center; gap: 12px; padding: 6px 12px; border-radius: var(--radius-control); background: var(--color-bg-overlay); box-shadow: var(--shadow-toolbar); font-size: var(--font-size-tag); color: var(--color-text-secondary); }
+.bar-chip button { font: inherit; font-size: var(--font-size-tag); background: none; border: 0; padding: 0; color: var(--color-text); text-decoration: underline; cursor: pointer; }
+
+/* Excalidraw's own tool palette, side panels and corner buttons give way to ours (shortcuts still work). */
+.canvas .excalidraw .App-menu_top, .canvas .excalidraw .App-menu__left, .canvas .excalidraw .layer-ui__wrapper__top-right,
+.canvas .excalidraw .layer-ui__wrapper__footer, .canvas .excalidraw .main-menu-trigger, .canvas .excalidraw .HintViewer { display: none !important; }
+.canvas-notice { bottom: 96px; }
+.update-banner { bottom: 96px; }

@@ -116,7 +116,7 @@ describe('interleave', () => {
   async function* slow(label: string, ms: number, n: number) { for (let i = 0; i < n; i++) { await new Promise(r => setTimeout(r, ms)); yield `${label}${i}`; } }
   it('yields from whichever source is ready, so a slow one never holds up a fast one', async () => {
     const out: string[] = [];
-    for await (const x of interleave(slow('slow', 40, 1), slow('fast', 5, 3))) out.push(x);
+    for await (const x of interleave(slow('slow', 250, 1), slow('fast', 5, 3))) out.push(x);
     expect(out).toEqual(['fast0', 'fast1', 'fast2', 'slow0']);
   });
   it('lets the others finish when one fails, then rethrows', async () => {
