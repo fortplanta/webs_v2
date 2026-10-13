@@ -197,3 +197,27 @@ a { color: var(--color-text); }
 .canvas .excalidraw .layer-ui__wrapper__footer, .canvas .excalidraw .main-menu-trigger, .canvas .excalidraw .HintViewer { display: none !important; }
 .canvas-notice { bottom: 96px; }
 .update-banner { bottom: 96px; }
+
+/* ── Timeline view ────────────────────────────────────────────────────────────────────────────────────────────── */
+.timeline { position: absolute; inset: 0; z-index: 4; background: var(--color-canvas); display: flex; flex-direction: column; }
+.timeline-topic { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); z-index: 2; padding: 4px 12px; border-radius: var(--radius-sm); background: var(--color-seed-bg); color: var(--color-seed-text); font-family: var(--font-display); font-weight: 100; font-size: 32px; line-height: 40px; max-width: 70vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.timeline-scroll { flex: 1; overflow: auto; position: relative; background: radial-gradient(ellipse at 50% 55%, rgba(255, 255, 255, 0.035), transparent 60%); }
+.timeline-canvas { position: relative; display: flow-root; }
+.tl-tick { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid #2A2A2A; }
+.tl-tick span { position: absolute; top: 96px; left: 0; transform: translateX(-50%); padding: 0 8px; background: var(--color-canvas); font-family: var(--font-display); font-weight: 100; font-size: 28px; color: #6B6B6B; white-space: nowrap; }
+.tl-card { position: absolute; width: 260px; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; padding: 12px; text-align: left; border: 0; border-radius: var(--radius-sm); background: var(--color-card-bg); box-shadow: var(--shadow-card); color: var(--color-card-body); cursor: pointer; font: inherit; outline: 0 !important; min-height: 0 !important; }
+.tl-card:hover { background: #151515; }
+.tl-card.ai { outline: 1px dashed #6B6B6B !important; outline-offset: -1px; }
+.tl-card.wiki { outline: 1px solid #2f5d9e !important; outline-offset: -1px; }
+.tl-year { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text-secondary); }
+.tl-title { font-weight: 500; font-size: 14px; color: var(--color-card-title); }
+.tl-body { font-size: 12px; font-weight: 300; line-height: 1.45; color: var(--color-card-body); }
+.tl-foot { margin-top: 2px; font-size: 10px; color: var(--color-card-foot); }
+.tl-image { width: 160px; padding: 0; background: transparent; box-shadow: none; }
+.tl-image img { display: block; width: 100%; border-radius: var(--radius-sm); }
+.tl-caption { position: absolute; left: 0; bottom: 0; padding: 1px 4px; background: rgba(0, 0, 0, 0.55); color: var(--color-text); font-size: 11px; }
+.tl-empty { position: absolute; top: 160px; left: 50%; transform: translateX(-50%); max-width: 420px; margin: 0; text-align: center; color: var(--color-text-secondary); line-height: 1.5; }
+.tl-undated { position: sticky; left: 24px; width: calc(100vw - 48px); box-sizing: border-box; padding-bottom: 120px; }
+.tl-undated h3 { margin: 0 0 var(--spacing-sm); font-size: var(--font-size-tag); font-weight: 400; letter-spacing: var(--tracking-wide); text-transform: uppercase; color: var(--color-text-secondary); }
+.tl-undated-row { display: flex; flex-wrap: wrap; gap: var(--spacing-sm); }
+.tl-undated .tl-card { position: static; }

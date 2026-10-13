@@ -58,6 +58,7 @@ export function App() {
 
   function start(q: string) {
     cancel.current?.();
+    setView('cluster');
     const id = crypto.randomUUID();
     idRef.current = id;
     setWebId(id);
@@ -80,6 +81,7 @@ export function App() {
 
   async function open(id: string) {
     cancel.current?.();
+    setView('cluster');
     const saved = await window.webs.loadWeb(id);
     if (!saved) { refreshLibrary(); return; }
     idRef.current = id;
@@ -103,6 +105,7 @@ export function App() {
   function back() {
     if (modelRef.current?.phase === 'running') stop();
     cancel.current = null;
+    setView('cluster');
     setCurrent(null);
     setWebId(null);
   }
@@ -127,6 +130,7 @@ export function App() {
           view={view}
           onView={setView}
           onSettings={() => setShowSettings(true)}
+          timeline
         >
           {model.warning && <span className="hint" role="status">{model.warning}</span>}
           {model.phase === 'error' && (
@@ -136,7 +140,7 @@ export function App() {
             </>
           )}
         </TopBar>
-        <CanvasView key={webId} webId={webId} model={model} restoredScene={restoredScene} restoredFiles={restoredFiles} onSceneChange={onSceneChange} />
+        <CanvasView key={webId} webId={webId} model={model} restoredScene={restoredScene} restoredFiles={restoredFiles} onSceneChange={onSceneChange} view={view} />
       </div>
     );
   }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Excalidraw, restoreElements, viewportCoordsToSceneCoords } from '@excalidraw/excalidraw';
 import type { BinaryFileData, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import '@excalidraw/excalidraw/index.css';
@@ -7,6 +7,8 @@ import type { InboxItem } from '../types/capture';
 import type { SavedFile } from '../types/ipc';
 import { captionLabel, clusterLabel, edgeLabel, FRAG_H, FRAG_W, GAP, HEADER_H } from './boxes';
 import { BottomToolbar } from './BottomToolbar';
+import { TimelineView } from './TimelineView';
+import type { TimelineCard } from './timeline';
 import { addCard, updateCard } from './card';
 import { fragmentFromCapture, fragmentFromPaste, looksLikeExcalidrawClipboard } from './capture';
 import { ClusterEditor, EdgeEditor, FragmentEditor, ImageCardEditor, InboxPanel, type StickProps } from './Editors';
@@ -32,6 +34,8 @@ interface Props {
   restoredFiles?: SavedFile[];
   /** Called (debounced) when the user's scene actually changes. */
   onSceneChange?: (elements: unknown[]) => void;
+  /** 'timeline' shows the cards along a time axis instead of the collection map. */
+  view?: 'cluster' | 'timeline';
 }
 
 type Editing =
@@ -53,7 +57,7 @@ const isEditable = (t: EventTarget | null) => t instanceof HTMLElement && (t.isC
 const build = (skeletons: unknown[]) => convertWithStableIds(skeletons) as El[];
 const makeArrow = (raw: El): El => restoreElements([raw as any], null)[0] as unknown as El;
 
-export function CanvasView({ webId, model, restoredScene, restoredFiles, onSceneChange }: Props) {
+export function CanvasView({ webId, model, restoredScene, restoredFiles, onSceneChange, view = 'cluster' }: Props) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
   const [captureUrl, setCaptureUrl] = useState('');
@@ -64,6 +68,9 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   // Picking what to stick a card to: set to that card's id until the user clicks a target (or cancels).
   const [sticking, setSticking] = useState<string | null>(null);
   const [, redraw] = useState(0);
+  const [sceneTick, setSceneTick] = useState(0); // bumps when the scene changes, so the timeline stays current
+  const viewRef = useRef(view);
+  viewRef.current = view;
   const cancelPivot = useRef<(() => void) | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout>>();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -137,6 +144,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     if (lastHash.current === null) { lastHash.current = hash; if (restored) return; }
     if (hash === lastHash.current) return;
     lastHash.current = hash;
+    if (viewRef.current === 'timeline') setSceneTick(t => t + 1);
     clearTimeout(timer.current);
     timer.current = setTimeout(() => onSceneChange(api ? (api.getSceneElementsIncludingDeleted() as unknown[]) : [...elements]), SAVE_DEBOUNCE_MS);
   }
@@ -234,6 +242,18 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     if (!el) return;
     apply(updateCard(scene(), id, fragment, el.customData, build));
   }
+
+  /** Everything the timeline shows, read from the scene so it always reflects the user's edits. */
+  const timelineCards = useMemo<TimelineCard[]>(() => {
+    if (!api || view !== 'timeline') return [];
+    const files = api.getFiles() as Record<string, { dataURL?: string }>;
+    return scene().flatMap((e): TimelineCard[] => {
+      if (e.isDeleted) return [];
+      if (e.type === 'rectangle' && e.customData?.kind === 'fragment') return [{ id: e.id, kind: 'fragment', fragment: e.customData.fragment, cluster: e.customData.cluster }];
+      if (e.type === 'rectangle' && e.customData?.kind === 'image-card') return [{ id: e.id, kind: 'image', caption: e.customData.caption, imageUrl: files[e.customData.fileId]?.dataURL }];
+      return [];
+    });
+  }, [api, view, sceneTick, editing]);
 
   // ── Tethers: keep a card within reach of another ───────────────────────────
 
@@ -479,7 +499,8 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
 
   return (
     <div className="canvas">
-      <div className={`canvas-inner${sticking ? " sticking" : ""}`} onPointerDownCapture={onPointerDownCapture} onWheelCapture={() => { navigated.current = true; }} onDoubleClickCapture={onDoubleClickCapture} onDragOverCapture={onDragOverCapture} onDropCapture={onDropCapture}>
+      {view === 'timeline' && <TimelineView topic={model.query} cards={timelineCards} onOpen={(id, kind) => openEditor({ id, kind })} />}
+      <div className={`canvas-inner${sticking ? " sticking" : ""}`} style={view === 'timeline' ? { visibility: 'hidden', pointerEvents: 'none' } : undefined} onPointerDownCapture={onPointerDownCapture} onWheelCapture={() => { navigated.current = true; }} onDoubleClickCapture={onDoubleClickCapture} onDragOverCapture={onDragOverCapture} onDropCapture={onDropCapture}>
         <Excalidraw
           excalidrawAPI={a => { setApi(a); if (import.meta.env.DEV) (window as unknown as { __api?: unknown }).__api = a; /* dev only: lets test scripts drive the canvas */ }}
           onChange={handleChange as any}
@@ -494,7 +515,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
 
       <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={e => { const f = [...(e.target.files ?? [])]; e.target.value = ''; void importImages(f); }} />
       <BottomToolbar
-        disabled={!api}
+        disabled={!api || view === 'timeline'}
         onFragment={addFreeFragment}
         onImage={() => fileInput.current?.click()}
         inbox={captureUrl ? { count: inbox.items.length, open: inboxOpen, onToggle: () => { setInboxOpen(o => !o); void refreshInbox(); } } : undefined}
