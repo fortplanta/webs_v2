@@ -73,7 +73,7 @@ export interface NewBox {
 
 export function addBox(elements: El[], box: NewBox, build: Build): El[] {
   const made = build([{
-    type: 'rectangle', id: box.id, x: box.x, y: box.y, width: box.width, height: box.height,
+    type: 'rectangle', id: box.id, x: box.x, y: box.y, width: box.width, height: box.height, roughness: 0,
     strokeColor: 'transparent', backgroundColor: box.backgroundColor, fillStyle: 'solid', roundness: null,
     customData: box.customData, label: box.label, ...(box.link ? { link: box.link } : {}),
   }]);

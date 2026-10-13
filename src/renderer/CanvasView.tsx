@@ -5,7 +5,8 @@ import '@excalidraw/excalidraw/index.css';
 import type { GeneratedFragment, PivotEvent } from '../backend/events';
 import type { InboxItem } from '../types/capture';
 import type { SavedFile } from '../types/ipc';
-import { captionLabel, clusterLabel, edgeLabel, FRAG_H, FRAG_W, fragmentLook, GAP, HEADER_H } from './boxes';
+import { captionLabel, clusterLabel, edgeLabel, FRAG_H, FRAG_W, GAP, HEADER_H } from './boxes';
+import { addCard, updateCard } from './card';
 import { fragmentFromCapture, fragmentFromPaste, looksLikeExcalidrawClipboard } from './capture';
 import { ClusterEditor, EdgeEditor, FragmentEditor, ImageCardEditor, InboxPanel, type StickProps } from './Editors';
 import { hitTest } from './hit';
@@ -145,10 +146,19 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   const apply = (next: El[]) => api!.updateScene({ elements: next as any });
   const byId = (id: string) => scene().find(e => e.id === id && !e.isDeleted);
 
+  /** Selecting a card selects its whole group (box, title, footer), so dragging moves them together. */
+  function selectionFor(id: string) {
+    const el = byId(id);
+    const g = el?.groupIds?.[el.groupIds.length - 1];
+    if (!g) return { selectedElementIds: { [id]: true } };
+    const members = scene().filter(e => !e.isDeleted && e.groupIds?.includes(g));
+    return { selectedElementIds: Object.fromEntries(members.map(e => [e.id, true])), selectedGroupIds: { [g]: true } };
+  }
+
   function openEditor(hit: { id: string; kind: 'fragment' | 'cluster' | 'image' | 'edge' }) {
     const el = byId(hit.id);
     if (!el) return;
-    api!.updateScene({ appState: { selectedElementIds: { [hit.id]: true } } as any });
+    api!.updateScene({ appState: selectionFor(hit.id) as any });
     if (hit.kind === 'fragment') setEditing({ kind: 'fragment', id: hit.id, fragment: el.customData.fragment });
     else if (hit.kind === 'cluster') setEditing({ kind: 'cluster', id: hit.id, title: el.customData.title, lens: el.customData.lens, origin: el.customData.origin });
     else if (hit.kind === 'image') setEditing({ kind: 'image', id: hit.id, data: el.customData });
@@ -184,8 +194,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   function editFragment(id: string, fragment: GeneratedFragment) {
     const el = byId(id);
     if (!el) return;
-    const look = fragmentLook(fragment);
-    apply(updateBox(scene(), id, { backgroundColor: look.backgroundColor, customData: { ...el.customData, fragment }, link: fragment.link ?? null, label: look.label }, build));
+    apply(updateCard(scene(), id, fragment, el.customData, build));
     setEditing({ kind: 'fragment', id, fragment });
   }
 
@@ -222,8 +231,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   function replaceFragment(id: string, fragment: GeneratedFragment) {
     const el = byId(id);
     if (!el) return;
-    const look = fragmentLook(fragment);
-    apply(updateBox(scene(), id, { backgroundColor: look.backgroundColor, customData: { ...el.customData, fragment }, link: fragment.link ?? null, label: look.label }, build));
+    apply(updateCard(scene(), id, fragment, el.customData, build));
   }
 
   // ── Tethers: keep a card within reach of another ───────────────────────────
@@ -367,15 +375,13 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
 
   /** Places a card and returns its id. `open` also selects it and opens the editor. */
   function newFragment(at: { x: number; y: number }, cluster?: number, fragment: GeneratedFragment = { type: 'concept', title: 'new fragment', body: 'Describe this fragment.', tags: [] }, open = true): string {
-    const look = fragmentLook(fragment);
     const id = `m-${crypto.randomUUID().slice(0, 8)}`;
-    apply(addBox(scene(), {
-      id, x: at.x, y: at.y, width: FRAG_W, height: FRAG_H,
-      backgroundColor: look.backgroundColor, label: look.label, link: fragment.link,
+    apply(addCard(scene(), {
+      id, x: at.x, y: at.y, fragment,
       customData: { kind: 'fragment', ...(cluster !== undefined ? { cluster } : {}), fragment },
     }, build));
     if (open) {
-      api!.updateScene({ appState: { selectedElementIds: { [id]: true } } as any });
+      api!.updateScene({ appState: selectionFor(id) as any });
       setEditing({ kind: 'fragment', id, fragment });
     }
     return id;
@@ -474,7 +480,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     <div className="canvas">
       <div className={`canvas-inner${sticking ? " sticking" : ""}`} onPointerDownCapture={onPointerDownCapture} onWheelCapture={() => { navigated.current = true; }} onDoubleClickCapture={onDoubleClickCapture} onDragOverCapture={onDragOverCapture} onDropCapture={onDropCapture}>
         <Excalidraw
-          excalidrawAPI={setApi}
+          excalidrawAPI={a => { setApi(a); if (import.meta.env.DEV) (window as unknown as { __api?: unknown }).__api = a; /* dev only: lets test scripts drive the canvas */ }}
           onChange={handleChange as any}
           UIOptions={{ tools: { image: false } }}
           initialData={{

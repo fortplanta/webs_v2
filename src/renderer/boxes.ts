@@ -86,11 +86,12 @@ export const AI_MARK = '✦ ';
 export const WIKI_MARK = 'W · ';
 
 export function clusterLabel(title: string, origin?: 'ai' | 'wiki'): LabelSpec {
-  return { text: (origin === 'ai' ? AI_MARK : origin === 'wiki' ? WIKI_MARK : '') + title.toUpperCase(), fontSize: 16, strokeColor: cssVar('--color-header-text', '#A8A8A8'), fontFamily: 6 };
+  // Collection titles are quiet display type (Denton) with no box: they sit on the canvas like the design's "umbrella category".
+  return { text: (origin === 'ai' ? AI_MARK : origin === 'wiki' ? WIKI_MARK : '') + title, fontSize: 24, strokeColor: cssVar('--color-header-text', '#8A8A8A'), fontFamily: 7 };
 }
 
 export function edgeLabel(text: string): LabelSpec {
-  return { text, fontSize: 14, strokeColor: cssVar('--color-edge-label', '#8A8A8A'), fontFamily: 6 };
+  return { text, fontSize: 12, strokeColor: cssVar('--color-edge-label', '#8A8A8A'), fontFamily: 6 };
 }
 
 export function captionLabel(text: string): LabelSpec {

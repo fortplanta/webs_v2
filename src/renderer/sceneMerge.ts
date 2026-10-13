@@ -15,11 +15,13 @@ export function convertWithStableIds(skeletons: unknown[]): El[] {
   // Safeguard: structured box data must survive conversion.
   const data = new Map((skeletons as El[]).filter(k => k.customData).map(k => [k.id as string, k.customData]));
   const rename = new Map<string, string>();
+  const byId = new Map(els.map(e => [e.id as string, e]));
   for (const el of els) if (el.type === 'text' && el.containerId) rename.set(el.id, `${el.containerId}-label`);
   const mapped = els.map(el => {
     const next = { ...el };
     if (data.has(el.id) && !el.customData) next.customData = data.get(el.id);
     if (rename.has(el.id)) next.id = rename.get(el.id);
+    if (el.type === 'text' && el.containerId && byId.get(el.containerId)?.groupIds?.length) next.groupIds = byId.get(el.containerId)!.groupIds;
     if (Array.isArray(el.boundElements)) {
       next.boundElements = el.boundElements.map((b: El) => (rename.has(b.id) ? { ...b, id: rename.get(b.id) } : b));
     }
@@ -59,8 +61,9 @@ export function mergeScene(prev: readonly El[], next: El[], applied: Map<string,
 
     // New or changed: adopt the generated look, but follow wherever the user moved the container
     // (a label that is new still belongs to a container the user may have dragged).
-    const anchorPrev = prevById.get(el.containerId ?? el.id);
-    const anchorNext = nextById.get(el.containerId ?? el.id);
+    const anchorId = el.containerId ?? el.customData?.card ?? el.id; // a label or a card's own text follows its card
+    const anchorPrev = prevById.get(anchorId);
+    const anchorNext = nextById.get(anchorId);
     if (!anchorPrev || !anchorNext) return el;
     return { ...el, x: el.x + (anchorPrev.x - anchorNext.x), y: el.y + (anchorPrev.y - anchorNext.y) };
   });
@@ -77,5 +80,5 @@ export function mergeScene(prev: readonly El[], next: El[], applied: Map<string,
 }
 
 function isGenerated(id: string): boolean {
-  return /^(seed|seed-link|kb-\d+|cluster-\d+|frag-\d+-\d+|tether-\d+-\d+|edge-\d+)(-label)?$/.test(id);
+  return /^(seed|seed-sub|seed-link|kb-\d+|cluster-\d+|frag-\d+-\d+(-title|-foot)?|tether-\d+-\d+|edge-\d+)(-label)?$/.test(id);
 }

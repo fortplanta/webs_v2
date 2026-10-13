@@ -36,7 +36,7 @@ describe('updateBox', () => {
   it('adds a label to an unlabeled box and removes one on null', () => {
     const bare = [rect('g')];
     const withLabel = updateBox(bare, 'g', { label: clusterLabel('Hi') }, build);
-    expect(withLabel.find(e => e.id === 'g-label')).toMatchObject({ containerId: 'g', text: 'HI' });
+    expect(withLabel.find(e => e.id === 'g-label')).toMatchObject({ containerId: 'g', text: 'Hi' });
     expect(withLabel.find(e => e.id === 'g')!.boundElements).toEqual([{ type: 'text', id: 'g-label' }]);
     const cleared = updateBox(withLabel, 'g', { label: null }, build);
     expect(cleared.find(e => e.id === 'g-label')!.isDeleted).toBe(true);

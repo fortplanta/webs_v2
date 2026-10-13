@@ -2,7 +2,8 @@
 // the card it grew from. Pure (builders are injected) so it can be tested without Excalidraw.
 
 import type { GeneratedFragment } from '../backend/events';
-import { clusterLabel, edgeLabel, fragmentLook, FRAG_H, FRAG_W, HEADER_H } from './boxes';
+import { clusterLabel, edgeLabel, FRAG_H, FRAG_W, HEADER_H } from './boxes';
+import { addCard } from './card';
 import { clusterFootprint, fanCenters, findClusterSpot } from './layout/organic';
 import { cssVar } from './theme';
 import { addBox, updateBox, type Build, type El } from './sceneEdit';
@@ -62,10 +63,8 @@ export function addPivotCluster(elements: El[], spec: PivotSpec, build: Build): 
   const spots = fanCenters(spec.cards.length, { x: spec.x + FRAG_W / 2, y: spec.y + HEADER_H / 2 }, spec.angle ?? 0);
   const cardIds = spec.cards.map((fragment, i) => {
     const id = `${spec.id}-c${i}`;
-    const look = fragmentLook(fragment);
-    out = addBox(out, {
-      id, x: spots[i].x - FRAG_W / 2, y: spots[i].y - FRAG_H / 2, width: FRAG_W, height: FRAG_H,
-      backgroundColor: look.backgroundColor, label: look.label,
+    out = addCard(out, {
+      id, x: spots[i].x - FRAG_W / 2, y: spots[i].y - FRAG_H / 2, fragment,
       customData: { kind: 'fragment', cluster: spec.index, slot: i, fragment },
     }, build);
     return id;
@@ -118,7 +117,7 @@ export function addThread(
   const arrow = makeArrow({
     type: 'arrow', id: spec.id, x: p1.x, y: p1.y, width: Math.abs(dx), height: Math.abs(dy), points: [[0, 0], [dx, dy]],
     startBinding: { elementId: from.id, focus: 0, gap: 4 }, endBinding: { elementId: to.id, focus: 0, gap: 4 },
-    startArrowhead: null, endArrowhead: 'arrow', strokeColor: cssVar('--color-edge-stroke', '#6B6B6B'), strokeWidth: 1, opacity: 70, roundness: null,
+    startArrowhead: null, endArrowhead: 'arrow', strokeColor: cssVar('--color-edge-stroke', '#6B6B6B'), strokeWidth: 1, opacity: 70, roundness: null, roughness: 0,
   });
   const bump = (e: El): El => ({ ...e, boundElements: [...(e.boundElements ?? []), { type: 'arrow', id: spec.id }], version: (e.version ?? 0) + 1, versionNonce: Math.floor(Math.random() * 2 ** 31), updated: Date.now() });
   let out = elements.map(e => (e.id === from.id || e.id === to.id ? bump(e) : e));

@@ -67,7 +67,7 @@ export function addTether(elements: El[], anchorId: string, childId: string, mak
   const arrow = makeArrow({
     type: 'arrow', id, x: a.x, y: a.y, width: Math.abs(c.x - a.x), height: Math.abs(c.y - a.y), points: [[0, 0], [c.x - a.x, c.y - a.y]],
     startBinding: { elementId: anchorId, focus: 0, gap: 4 }, endBinding: { elementId: childId, focus: 0, gap: 4 },
-    startArrowhead: null, endArrowhead: null, strokeColor: cssVar('--color-edge-stroke', '#6B6B6B'), strokeWidth: 1, strokeStyle: 'dotted', opacity: 55, roundness: null,
+    startArrowhead: null, endArrowhead: null, strokeColor: cssVar('--color-edge-stroke', '#6B6B6B'), strokeWidth: 1, strokeStyle: 'dotted', opacity: 55, roundness: null, roughness: 0,
     customData: { kind: TETHER_KIND, max: max ?? tetherLimit(anchor, child) },
   });
   out = out.map(e => (e.id === anchorId || e.id === childId ? bump({ ...e, boundElements: [...(e.boundElements ?? []), { type: 'arrow', id }] }) : e));
