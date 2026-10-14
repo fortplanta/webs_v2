@@ -49,8 +49,11 @@ export function ticks(min: number, max: number, target = 6): number[] {
 }
 
 export interface Placed { card: TimelineCard; x: number; y: number; year: number; inferred: boolean }
+export interface Lane { type: string; y: number; height: number }
 export interface TimelineLayout {
   placed: Placed[];
+  /** Horizontal bands, one per card kind (events, people, ideas…), like the rows of a Gantt chart. */
+  lanes: Lane[];
   undated: TimelineCard[];
   ticks: Array<{ year: number; x: number }>;
   width: number;
@@ -66,6 +69,8 @@ export interface LayoutOptions {
   top?: number;
 }
 
+const LANE_ORDER = ['era', 'event', 'person', 'thesis', 'concept', 'source', 'domain', 'quote'];
+
 /** Cards by year along x; where two would overlap, the later one drops to the next free row. */
 export function layoutTimeline(cards: TimelineCard[], opts: LayoutOptions = {}): TimelineLayout {
   const { width = 3 * 1280, padX = 200, cardW = 260, rowH = 210, top = 150 } = opts;
@@ -74,7 +79,7 @@ export function layoutTimeline(cards: TimelineCard[], opts: LayoutOptions = {}):
     return d ? [{ card, ...d }] : [];
   });
   const undated = cards.filter(c => !dated.some(d => d.card.id === c.id));
-  if (!dated.length) return { placed: [], undated, ticks: [], width: 1280, height: 640 };
+  if (!dated.length) return { placed: [], lanes: [], undated, ticks: [], width: 1280, height: 640 };
 
   const years = dated.map(d => d.year);
   const lo = Math.min(...years), hi = Math.max(...years);
@@ -83,14 +88,27 @@ export function layoutTimeline(cards: TimelineCard[], opts: LayoutOptions = {}):
   const span = Math.max(max - min, 1);
   const xOf = (y: number) => padX + ((y - min) / span) * (width - 2 * padX);
 
-  const rowEnds: number[] = [];
-  const placed: Placed[] = [...dated].sort((a, b) => a.year - b.year || (a.card.id < b.card.id ? -1 : 1)).map(d => {
-    const left = xOf(d.year) - cardW / 2;
-    let row = rowEnds.findIndex(end => end + 24 <= left);
-    if (row < 0) row = rowEnds.length;
-    rowEnds[row] = left + cardW;
-    return { card: d.card, x: left, y: top + row * rowH, year: d.year, inferred: d.inferred };
-  });
-  const rows = Math.max(rowEnds.length, 1);
-  return { placed, undated, ticks: tk.map(year => ({ year, x: xOf(year) })), width, height: top + rows * rowH + 120 };
+  // One lane per kind of card; inside a lane, cards that would overlap drop to the next row.
+  const kindOf = (c: TimelineCard) => c.fragment?.type ?? 'concept';
+  const present = LANE_ORDER.filter(k => dated.some(d => kindOf(d.card) === k));
+  for (const d of dated) if (!present.includes(kindOf(d.card))) present.push(kindOf(d.card));
+  const placed: Placed[] = [];
+  const lanes: Lane[] = [];
+  let y = top;
+  for (const type of present) {
+    const rowEnds: number[] = [];
+    const inLane = dated.filter(d => kindOf(d.card) === type).sort((a, b) => a.year - b.year || (a.card.id < b.card.id ? -1 : 1));
+    const base = y;
+    for (const d of inLane) {
+      const left = xOf(d.year) - cardW / 2;
+      let row = rowEnds.findIndex(end => end + 24 <= left);
+      if (row < 0) row = rowEnds.length;
+      rowEnds[row] = left + cardW;
+      placed.push({ card: d.card, x: left, y: base + row * rowH, year: d.year, inferred: d.inferred });
+    }
+    const height = Math.max(rowEnds.length, 1) * rowH;
+    lanes.push({ type, y: base, height });
+    y += height;
+  }
+  return { placed, lanes, undated, ticks: tk.map(year => ({ year, x: xOf(year) })), width, height: y + 120 };
 }

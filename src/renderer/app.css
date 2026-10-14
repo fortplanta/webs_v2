@@ -205,10 +205,11 @@ a { color: var(--color-text); }
 .timeline-canvas { position: relative; display: flow-root; }
 .tl-tick { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid #2A2A2A; }
 .tl-tick span { position: absolute; top: 96px; left: 0; transform: translateX(-50%); padding: 0 8px; background: var(--color-canvas); font-family: var(--font-display); font-weight: 100; font-size: 28px; color: #6B6B6B; white-space: nowrap; }
+.tl-lane { position: absolute; left: 0; right: 0; border-top: 1px solid #1B1B1B; pointer-events: none; }
+.tl-lane span { position: sticky; left: 16px; display: inline-block; margin: 8px 0 0 16px; font-size: var(--font-size-tag); letter-spacing: var(--tracking-wide); text-transform: uppercase; color: #4E4E4E; }
 .tl-card { position: absolute; width: 260px; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; padding: 12px; text-align: left; border: 0; border-radius: var(--radius-sm); background: var(--color-card-bg); box-shadow: var(--shadow-card); color: var(--color-card-body); cursor: pointer; font: inherit; outline: 0 !important; min-height: 0 !important; }
 .tl-card:hover { background: #151515; }
 .tl-card.ai { outline: 1px dashed #6B6B6B !important; outline-offset: -1px; }
-.tl-card.wiki { outline: 1px solid #2f5d9e !important; outline-offset: -1px; }
 .tl-year { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text-secondary); }
 .tl-title { font-weight: 500; font-size: 14px; color: var(--color-card-title); }
 .tl-body { font-size: 12px; font-weight: 300; line-height: 1.45; color: var(--color-card-body); }

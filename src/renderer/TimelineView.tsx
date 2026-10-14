@@ -39,6 +39,9 @@ export function TimelineView({ topic, cards, onOpen }: TimelineViewProps) {
           {layout.ticks.map(t => (
             <div key={t.year} className="tl-tick" style={{ left: t.x }}><span>{yearLabel(t.year)}</span></div>
           ))}
+          {layout.lanes.map(l => (
+            <div key={l.type} className="tl-lane" style={{ top: l.y, height: l.height }}><span>{l.type}</span></div>
+          ))}
           {layout.placed.map(p => <Card key={p.card.id} card={p.card} year={p.year} inferred={p.inferred} style={{ left: p.x, top: p.y }} onOpen={onOpen} />)}
           {layout.placed.length === 0 && (
             <p className="tl-empty">No dates on this web yet. Add one in a card's editor (Date / era) — or a year in its text — and it appears here.</p>

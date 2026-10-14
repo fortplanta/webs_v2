@@ -98,3 +98,15 @@ export function candidatePairs(passages: Array<{ id: string; terms: string[] }>,
   }
   return pairs.sort((x, y) => y.shared.length - x.shared.length).slice(0, limit);
 }
+
+/**
+ * The year a card is about, as the narrator gave it — kept only if the source passage states it. Every number in `when`
+ * must be in the passage (so "1687" or "44 BCE" survive, a guessed "around 1700" does not), and it must read as a year.
+ */
+export function groundedWhen(when: string | undefined, source: string): string | undefined {
+  const w = (when ?? '').trim();
+  if (!w || !/^(?:c\.?\s*|circa\s+|about\s+)?\d{1,4}(?:\s*(?:BCE|BC|CE|AD))?(?:\s*[–-]\s*\d{1,4}(?:\s*(?:BCE|BC|CE|AD))?)?$/i.test(w)) return undefined;
+  const known = numbers(source);
+  for (const n of numbers(w)) if (!known.has(n)) return undefined;
+  return w;
+}

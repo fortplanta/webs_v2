@@ -142,3 +142,15 @@ describe('the narrator in the lensed strategy', () => {
     expect(card.relates).toBeUndefined();
   });
 });
+
+import { groundedWhen } from '../src/backend/narration';
+describe('groundedWhen', () => {
+  const src = 'Newton published the Principia in 1687. The Roman republic ended in 27 BCE.';
+  it('keeps a year the passage states and drops one it does not', () => {
+    expect(groundedWhen('1687', src)).toBe('1687');
+    expect(groundedWhen('27 BCE', src)).toBe('27 BCE');
+    expect(groundedWhen('1700', src)).toBeUndefined();
+    expect(groundedWhen('sometime in the 1600s', src)).toBeUndefined();
+    expect(groundedWhen(undefined, src)).toBeUndefined();
+  });
+});

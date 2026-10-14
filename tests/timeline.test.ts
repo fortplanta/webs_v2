@@ -39,6 +39,18 @@ describe('ticks', () => {
   });
 });
 
+describe('layoutTimeline lanes', () => {
+  const card = (id: string, f: Record<string, unknown>): TimelineCard => ({ id, kind: 'fragment', fragment: frag(f) });
+  it('gives each kind of card its own lane, stacked without overlap', () => {
+    const out = layoutTimeline([card('a', { type: 'person', era: '1900' }), card('b', { type: 'event', era: '1901' }), card('c', { type: 'event', era: '1902' })]);
+    expect(out.lanes.map(l => l.type)).toEqual(['event', 'person']);
+    const y = (id: string) => out.placed.find(p => p.card.id === id)!.y;
+    const [ev, pe] = out.lanes;
+    expect(y('b')).toBeGreaterThanOrEqual(ev.y); expect(y('c')).toBeLessThan(ev.y + ev.height);
+    expect(y('a')).toBeGreaterThanOrEqual(pe.y); expect(pe.y).toBeGreaterThanOrEqual(ev.y + ev.height);
+  });
+});
+
 describe('layoutTimeline', () => {
   const card = (id: string, f: Record<string, unknown>): TimelineCard => ({ id, kind: 'fragment', fragment: frag(f) });
   it('places cards left to right by year and sets undated ones aside', () => {

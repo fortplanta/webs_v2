@@ -61,7 +61,7 @@ export function normalizeFragment(raw: any): GeneratedFragment | null {
  * What the model contributes to a card built from a passage: its kind, a title, tags and the bridge sentence. The body
  * is not the model's to write — it is the passage itself, shown in full (see lensed.ts).
  */
-export interface CardMeta { fits?: boolean; type: FragmentType; title: string; tags?: string[]; bridge?: string; weight?: 1 | 2 | 3; retelling?: string; relates?: Array<{ to: string; verb: string }> }
+export interface CardMeta { fits?: boolean; type: FragmentType; title: string; tags?: string[]; bridge?: string; weight?: 1 | 2 | 3; retelling?: string; when?: string; relates?: Array<{ to: string; verb: string }> }
 
 export function cardMeta(raw: any): CardMeta | null {
   if (!raw || typeof raw.title !== 'string' || !raw.title.trim()) return null;
@@ -72,10 +72,11 @@ export function cardMeta(raw: any): CardMeta | null {
     .map((r: any) => ({ to: String(r?.to ?? '').toUpperCase().replace(/[^P0-9]/g, ''), verb: String(r?.verb ?? '').trim().slice(0, 40) }))
     .filter((r: { to: string; verb: string }) => r.to && r.verb).slice(0, 3);
   const weight = Number(raw.weight);
+  const when = typeof raw.when === 'string' || typeof raw.when === 'number' ? String(raw.when).trim().slice(0, 30) : '';
   return {
     ...(raw.fits === false ? { fits: false } : {}),
     type: GENERATED_TYPES.includes(raw.type) ? raw.type : 'concept', title: raw.title.trim(),
-    ...(tags.length ? { tags } : {}), ...(bridge ? { bridge } : {}), ...(retelling ? { retelling } : {}),
+    ...(tags.length ? { tags } : {}), ...(bridge ? { bridge } : {}), ...(retelling ? { retelling } : {}), ...(when ? { when } : {}),
     ...(relates.length ? { relates } : {}), ...(weight === 1 || weight === 2 || weight === 3 ? { weight: weight as 1 | 2 | 3 } : {}),
   };
 }

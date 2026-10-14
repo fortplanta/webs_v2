@@ -15,7 +15,7 @@ import type { GeneratedFragment, OverviewEdge, WebEvent } from '../events';
 import {
   buildLensedFragmentsMessage, buildLensedOverviewMessage, LENSED_FRAGMENTS_SYSTEM_PROMPT, LENSED_OVERVIEW_SYSTEM_PROMPT, passageIds,
 } from '../prompts';
-import { candidatePairs, checkClaims, checkRetelling, clampWeight, restoreNames, sentenceCase, sharedTerms, weightFor } from '../narration';
+import { candidatePairs, checkClaims, checkRetelling, clampWeight, groundedWhen, restoreNames, sentenceCase, sharedTerms, weightFor } from '../narration';
 import { cardMeta, JsonObjectStream, parseLensedOverview } from '../parse';
 import type { LibraryRetrieval } from '../library/service';
 import { wikipediaOrigin } from '../library/images';
@@ -242,8 +242,9 @@ async function* kbCards(ctx: Parameters<Strategy>[0], q: string, retrieval: Awai
         const relates = (meta.relates ?? [])
           .filter(r => r.to !== hit.id && where.has(r.to) && sharedTerms(w.p.terms, where.get(r.to)!.p.terms, retrieval.terms) >= 3)
           .map(r => ({ to: where.get(r.to)!.p.id, verb: r.verb }));
+        const era = groundedWhen(meta.when, w.p.text);
         const fragment: GeneratedFragment = {
-          type: meta.type, title, ...(meta.tags ? { tags: meta.tags } : {}), ...(hook ? { bridge: hook } : {}),
+          type: meta.type, title, ...(era ? { era } : {}), ...(meta.tags ? { tags: meta.tags } : {}), ...(hook ? { bridge: hook } : {}),
           body: retold ? retelling! : w.p.text,
           ...(retold ? { retold: true, original: w.p.text } : {}),
           ...(verdict && !verdict.ok ? { retellingRefused: verdict.reason } : {}),

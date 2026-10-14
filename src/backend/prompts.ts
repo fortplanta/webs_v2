@@ -146,7 +146,7 @@ ${renderCollections(collections, true)}
 ${skip.length ? `\nAlready set aside as not fitting (do not output them): ${skip.join(', ')}\n` : ''}${pairs.length ? `\nPassages that share vocabulary, so a link between them might be real (use them for "relates" only if it truly is): ${pairs.map(p => `${p.a}~${p.b} (${p.shared.slice(0, 4).join(', ')})`).join('; ')}\n` : ''}
 For every passage, in order (${ids.flat().filter(id => !skip.includes(id)).join(', ')}), give one JSON object per line:
 
-{"passage": "P1", "fits": true, "type": "person | concept | thesis | source | event | era | domain | quote", "title": "2-6 words, in your voice, lowercase", "hook": "one sentence on why this matters for the question", "weight": 3, "relates": [{"to": "P3", "verb": "led to"}], "tags": ["tag1", "tag2"], "retelling": "the whole passage, retold in your voice"}
+{"passage": "P1", "fits": true, "type": "person | concept | thesis | source | event | era | domain | quote", "title": "2-6 words, in your voice, lowercase", "hook": "one sentence on why this matters for the question", "weight": 3, "when": "1687", "relates": [{"to": "P3", "verb": "led to"}], "tags": ["tag1", "tag2"], "retelling": "the whole passage, retold in your voice"}
 
 Rules:
 - "passage" is the id of the passage. Use each id once.
@@ -154,6 +154,7 @@ Rules:
 - "retelling" is in normal sentence case (capital letters at the start of sentences and for names). It keeps EVERY fact, name and number in the passage and adds none, and it is about as long as the passage: do not shorten it into a summary. If the passage is a list, keep it a list.
 - "title" and "hook" may use only names and numbers that appear in the passage or the question.
 - "weight" is 1, 2 or 3: how central this passage is to the through-line (3 = the heart of it, 1 = supporting detail).
+- "when" is optional: the year (or "44 BCE", or "1914–1918") this passage is mainly about, ONLY if the passage itself states it. Never work one out or guess one; leave it out otherwise.
 - "relates" is optional: up to 2 links to OTHER passages when one clearly led to, caused, answers, contradicts or builds on the other, preferably from the vocabulary-sharing pairs listed above. "to" is a passage id; "verb" is a short verb phrase. Leave it out when unsure.
 - "type": person, concept, thesis (a contested claim), source (a document or reference), event, era, domain, or quote (verbatim text).
 - "tags": 2-4 lowercase words. Omit for quotes.
