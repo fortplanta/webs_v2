@@ -1,4 +1,4 @@
-import type { PivotEvent, PivotRequest, WebEvent } from '../backend/events';
+import type { LensRequest, LensResult, PivotEvent, PivotRequest, WebEvent } from '../backend/events';
 import type { WebModel } from './web';
 import type { CaptureTestResult, InboxResult } from './capture';
 import type { AiTestResult, KbModuleInfo, OllamaModelsResult, SaveSettingsResult, SettingsBundle, SettingsPatch } from './settings';
@@ -57,6 +57,8 @@ export interface WebsApi {
   warmUp(): void;
   /** Grow a new collection from a card; events arrive until 'done' or 'error'. Returns a cancel function. */
   pivot(req: PivotRequest, onEvent: (event: PivotEvent) => void): () => void;
+  /** Look at a card through a lens (explain simply, fact check…); resolves to a new card to place beside it. */
+  lens(req: LensRequest): Promise<LensResult>;
   listWebs(): Promise<SavedWebSummary[]>;
   loadWeb(id: string): Promise<SavedWeb | null>;
   saveWeb(input: SaveWebInput): Promise<void>;

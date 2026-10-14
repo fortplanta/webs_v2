@@ -110,3 +110,10 @@ export function groundedWhen(when: string | undefined, source: string): string |
   for (const n of numbers(w)) if (!known.has(n)) return undefined;
   return w;
 }
+
+/** Looser than checkClaims: only that `text` brings no new numbers. For lenses that argue from general knowledge, where new names are fine but statistics and dates are not. */
+export function checkNumbers(text: string, source: string): Check {
+  const known = numbers(source);
+  for (const n of numbers(text)) if (!known.has(n)) return { ok: false, reason: `a number (${n}) that isn't in the card` };
+  return { ok: true };
+}

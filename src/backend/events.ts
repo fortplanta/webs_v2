@@ -98,3 +98,22 @@ export type PivotEvent =
   | { type: 'card'; slot: number; fragment: GeneratedFragment }
   | { type: 'done' }
   | { type: 'error'; code: WebsErrorCode; message: string };
+
+// ── Lenses: another way of looking at one card ───────────────────────────────────────────────────
+
+export type LensId = 'explain-simple' | 'vivid' | 'fact-check' | 'steelman' | 'challenge';
+
+/** What the UI lists (the prompts themselves live in lenses.ts). */
+export const LENS_CHOICES: Array<{ id: LensId; label: string; description: string; kind: 'rewrite' | 'argument' }> = [
+  { id: 'explain-simple', label: 'Explain simply', description: 'The same thing, for someone new to it', kind: 'rewrite' },
+  { id: 'vivid', label: 'Make it vivid', description: 'The same thing, as a scene you can picture', kind: 'rewrite' },
+  { id: 'fact-check', label: 'Fact check', description: 'Where the claims are solid and where they are shaky', kind: 'argument' },
+  { id: 'steelman', label: 'Steelman', description: 'The strongest case for this idea', kind: 'argument' },
+  { id: 'challenge', label: 'Challenge', description: 'What could be wrong with this', kind: 'argument' },
+];
+
+export interface LensRequest { card: GeneratedFragment; lens: LensId }
+
+export type LensResult =
+  | { ok: true; fragment: GeneratedFragment; label: string }
+  | { ok: false; message: string };

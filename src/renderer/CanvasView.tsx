@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Excalidraw, restoreElements, viewportCoordsToSceneCoords } from '@excalidraw/excalidraw';
 import type { BinaryFileData, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import '@excalidraw/excalidraw/index.css';
-import type { GeneratedFragment, PivotEvent, WebEvent } from '../backend/events';
+import { LENS_CHOICES, type GeneratedFragment, type LensId, type PivotEvent, type WebEvent } from '../backend/events';
 import type { InboxItem } from '../types/capture';
 import type { SavedFile } from '../types/ipc';
 import { captionLabel, clusterLabel, edgeLabel, FRAG_H, FRAG_W, GAP, HEADER_H } from './boxes';
@@ -10,7 +10,7 @@ import { BottomToolbar } from './BottomToolbar';
 import type { Command } from './commands';
 import { TimelineView } from './TimelineView';
 import type { TimelineCard } from './timeline';
-import { addCard, updateCard } from './card';
+import { addCard, cardSize, updateCard } from './card';
 import { fragmentFromCapture, fragmentFromPaste, looksLikeExcalidrawClipboard } from './capture';
 import { ClusterEditor, EdgeEditor, FragmentEditor, ImageCardEditor, InboxPanel, type StickProps } from './Editors';
 import { hitTest } from './hit';
@@ -73,6 +73,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   const [inboxOpen, setInboxOpen] = useState(false);
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
   const [pivot, setPivot] = useState<{ status: string } | null>(null);
+  const [lensing, setLensing] = useState<string | null>(null);
   // Picking what to stick a card to: set to that card's id until the user clicks a target (or cancels).
   const [sticking, setSticking] = useState<string | null>(null);
   const [, redraw] = useState(0);
@@ -523,6 +524,27 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     api.scrollToContent(el as any, { animate: true, fitToViewport: false });
   }
 
+  /** Look at a card another way: the result is a new card beside it, tethered to it; the original is untouched. */
+  async function startLens(cardId: string, lens: LensId) {
+    const el = byId(cardId), label = LENS_CHOICES.find(l => l.id === lens)?.label ?? lens;
+    if (!api || !el || lensing) return;
+    setLensing(label);
+    try {
+      const res = await window.webs.lens({ card: el.customData.fragment, lens });
+      const source = byId(cardId);
+      if (!res.ok) { say('error', res.message); return; }
+      if (!source) { say('error', 'The card this was made from is gone.'); return; }
+      const f = res.fragment, id = `lens-${crypto.randomUUID().slice(0, 8)}`;
+      const size = cardSize(f);
+      const x = source.x + source.width / 2 >= 0 ? source.x + source.width + 56 : source.x - size.width - 56;
+      const at = findFreeSpot(scene(), { x, y: source.y }, size.width, size.height);
+      const added = addCard(scene(), { id, x: at.x, y: at.y, fragment: f, customData: { kind: 'fragment', fragment: f } }, build);
+      apply(addTether(added, cardId, id, makeArrow, 640));
+      api.updateScene({ appState: selectionFor(id) as any });
+      reveal({ x: at.x, y: at.y, width: size.width, height: size.height });
+    } finally { setLensing(null); }
+  }
+
   /** A picture fetched for a library card: saved with the web, placed beside its card on the side away from the middle, and tethered to it. */
   const pictureQueue = useRef<Promise<void>>(Promise.resolve());
   function placePicture(ev: Extract<WebEvent, { type: 'image' }>) {
@@ -555,6 +577,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
       { id: 'add-image', group: 'Actions', label: 'Add image', keywords: 'picture photo', run: () => fileInput.current?.click() },
       { id: 'zoom-fit', group: 'Actions', label: 'Zoom to fit', hint: '⇧1', keywords: 'view', run: () => zoom('fit') },
       ...(selected && !pivot ? [{ id: 'explore', group: 'Actions', label: 'Explore a different angle', detail: selected.customData.fragment?.title, run: () => startPivot(selected.id) }] : []),
+      ...(selected && !lensing ? LENS_CHOICES.map(l => ({ id: `lens-${l.id}`, group: 'Look at this card', label: l.label, detail: l.kind === 'argument' ? '✦ AI · not from your notes' : l.description, keywords: `${l.description} ${selected.customData.fragment?.title ?? ''}`, run: () => startLens(selected.id, l.id) })) : []),
     ];
     for (const e of scene()) {
       if (e.isDeleted || e.type !== 'rectangle' || e.customData?.kind !== 'fragment') continue;
@@ -594,6 +617,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
         inbox={captureUrl ? { count: inbox.items.length, open: inboxOpen, onToggle: () => { setInboxOpen(o => !o); void refreshInbox(); } } : undefined}
         chips={[
           ...(sticking ? [{ text: 'Click the card or label it should stay near', action: { label: 'Cancel', run: () => setSticking(null) } }] : []),
+          ...(lensing ? [{ text: `${lensing}…` }] : []),
           ...(pivot ? [{ text: `Exploring · ${pivot.status}`, action: { label: 'Stop', run: stopPivot } }] : []),
         ]}
         legend={(() => {
