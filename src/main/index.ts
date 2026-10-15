@@ -171,9 +171,19 @@ function warmOnce() {
 ipcMain.on('webs:warmup', warmOnce);
 
 function createWindow() {
+  // A hybrid title bar: the OS still draws the window controls (traffic lights on macOS, the system buttons on
+  // Windows/Linux), but the page's own top bar fills the title bar area and is draggable where it has no controls.
+  const hybrid: Electron.BrowserWindowConstructorOptions = process.platform === 'darwin'
+    ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 18, y: 21 } }  // vertically centred in the 56px bar
+    : { titleBarStyle: 'hidden', titleBarOverlay: { color: '#000000', symbolColor: '#C4C4C4', height: 56 } };
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
+    minWidth: 720,
+    minHeight: 480,
+    title: 'Webs',
+    backgroundColor: '#000000',
+    ...hybrid,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,

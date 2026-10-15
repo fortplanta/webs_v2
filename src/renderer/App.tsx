@@ -171,6 +171,7 @@ export function App() {
 
   return (
     <div className="screen">
+      <div className="titlebar-strip" aria-hidden />
       <button className="settings-link" onClick={() => setShowSettings(true)}>Settings</button>
       <div className="query">
         <h1>What do you want to explore?</h1>

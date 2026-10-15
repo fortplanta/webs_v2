@@ -254,3 +254,22 @@ a { color: var(--color-text); }
 
 .link-verdict { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 8px; }
 .link-verdict p { margin: 0; font-size: 12px; line-height: 1.45; color: var(--color-card-body); }
+
+/* ── Title bar ────────────────────────────────────────────────────────────────────────────────────────────────
+   The window has no native title bar: the OS draws only its controls (traffic lights on the left on macOS, system
+   buttons on the right on Windows/Linux) and each screen's own top bar fills that strip. Empty parts of the bar drag
+   the window, and double-clicking them zooms/maximises it (the OS does both for a drag region). Anything you can click
+   opts out, or it would drag instead of click. Keyboard and screen-reader users never meet the drag region: it is not
+   focusable and carries no semantics, and the native controls stay in the OS's own tab order. */
+.topbar, .settings .bar, .titlebar-strip { -webkit-app-region: drag; user-select: none; -webkit-user-select: none; }
+button, input, select, textarea, a, label, .menu, .segmented, .split, .tab-stop, [role='dialog'], [contenteditable] { -webkit-app-region: no-drag; }
+.titlebar-strip { position: fixed; top: 0; left: 0; right: 0; height: 44px; z-index: 5; }
+.topbar .hint, .topbar .error { -webkit-app-region: no-drag; user-select: text; }
+
+/* leave room for the window controls */
+:root[data-platform='mac']:not([data-fullscreen='true']) .topbar,
+:root[data-platform='mac']:not([data-fullscreen='true']) .settings .bar { padding-left: 86px; }
+:root[data-platform='mac']:not([data-fullscreen='true']) .titlebar-strip { left: 0; }
+:root:not([data-platform='mac']) .topbar,
+:root:not([data-platform='mac']) .settings .bar { padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + var(--spacing-base)); }
+:root[data-platform='mac'] .settings .bar { min-height: 56px; box-sizing: border-box; display: flex; align-items: center; }
