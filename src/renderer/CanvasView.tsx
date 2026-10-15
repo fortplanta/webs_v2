@@ -9,6 +9,7 @@ import { captionLabel, clusterLabel, edgeLabel, FRAG_H, FRAG_W, GAP, HEADER_H } 
 import { BottomToolbar } from './BottomToolbar';
 import type { Command } from './commands';
 import { TimelineView } from './TimelineView';
+import { LodOverlay } from './LodOverlay';
 import type { TimelineCard } from './timeline';
 import { addCard, cardSize, updateCard } from './card';
 import { fragmentFromCapture, fragmentFromPaste, looksLikeExcalidrawClipboard } from './capture';
@@ -607,6 +608,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
             appState: { viewBackgroundColor: '#000000' },
           }}
         />
+        <LodOverlay api={api} hidden={view === 'timeline'} />
       </div>
 
       <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={e => { const f = [...(e.target.files ?? [])]; e.target.value = ''; void importImages(f); }} />
