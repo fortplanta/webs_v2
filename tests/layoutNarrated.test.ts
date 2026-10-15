@@ -12,6 +12,21 @@ const model = (slots: Array<any | null>[], context = 'The through-line.') => {
 };
 const ids = (sk: Array<Record<string, any>>) => sk.map(e => e.id as string);
 
+describe('placeholders for cards that never arrived', () => {
+  it('draws a faint placeholder and its line while the web is being written, and neither once it is finished', () => {
+    const running = model([[frag('a'), null, null]]);
+    expect(ids(buildSkeletons(running))).toEqual(expect.arrayContaining(['frag-0-1', 'tether-0-1', 'frag-0-2', 'tether-0-2']));
+    const done = reduce(running, { type: 'done' });
+    const sk = ids(buildSkeletons(done));
+    expect(sk).toEqual(expect.arrayContaining(['frag-0-0', 'tether-0-0']));
+    expect(sk.some(id => /frag-0-[12]|tether-0-[12]/.test(id))).toBe(false); // no lines to nothing
+  });
+  it('hides a collection none of whose cards ever arrived', () => {
+    const done = reduce(model([[null, null], [frag('b')]]), { type: 'done' });
+    expect(ids(buildSkeletons(done))).not.toContain('cluster-0');
+  });
+});
+
 describe('layout of a narrated web', () => {
   it('does not draw passages the narrator set aside, nor a collection with nothing left', () => {
     const sk = buildSkeletons(model([[frag('a'), frag('b', { dropped: true })], [frag('c', { dropped: true })]]));

@@ -59,7 +59,9 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
   const hidden = new Set<number>(); // collections whose every card the narrator set aside
   m.clusters.forEach((cluster, ci) => {
     const h = heads[ci];
-    const visible = cluster.slots.map((f, i) => i).filter(i => !cluster.slots[i]?.dropped);
+    // a slot nothing ever filled is only a placeholder while the web is still being written; it does not outlive that
+    const settled = m.phase !== 'running';
+    const visible = cluster.slots.map((f, i) => i).filter(i => !cluster.slots[i]?.dropped && !(settled && !cluster.slots[i]));
     if (visible.length === 0 && cluster.slots.length > 0) { hidden.add(ci); return; }
     out.push({
       type: 'rectangle', roughness: 0, id: `cluster-${ci}`, x: h.x - FRAG_W / 2, y: h.y - HEADER_H / 2, width: FRAG_W, height: HEADER_H,
@@ -75,11 +77,11 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
     const rank = [...visible].sort((a, b) => (cluster.slots[b]?.weight ?? 2) - (cluster.slots[a]?.weight ?? 2) || a - b);
     const spots = cluster.slots.map((_, fi) => spotsVisible[Math.max(rank.indexOf(fi), 0)]);
     cluster.slots.forEach((frag, fi) => {
-      if (frag?.dropped) return; // set aside by the narrator
+      if (frag?.dropped || (settled && !frag)) return; // set aside by the narrator, or never written
       const base = { type: 'rectangle', roughness: 0, id: `frag-${ci}-${fi}`, x: spots[fi].x - sizes[fi].width / 2, y: spots[fi].y - sizes[fi].height / 2, width: sizes[fi].width, height: sizes[fi].height, roundness: null };
       if (!frag) {
-        // Ghost slot: dashed outline, no text — shows where content will land.
-        out.push({ ...base, strokeColor: 'rgba(0,0,0,0.25)', strokeStyle: 'dashed', backgroundColor: 'rgba(0,0,0,0.04)', fillStyle: 'solid' });
+        // Ghost slot: a faint dashed outline, no text — shows where content will land while the web is being written.
+        out.push({ ...base, strokeColor: cssVar('--color-ghost', '#2A2A2A'), strokeStyle: 'dashed', backgroundColor: 'transparent', fillStyle: 'solid' });
       } else {
         const look = cardLook(frag);
         out.push({

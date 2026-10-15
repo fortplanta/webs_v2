@@ -86,21 +86,38 @@ export const lensed: Strategy = async function* (ctx) {
   // Whatever the local tier found, if it is fewer collections than asked for the AI can fill the gap (when that is on),
   // running alongside the local web so neither waits for the other.
   const missing = wanted - collections.length;
-  if (ctx.ai?.topUp && missing > 0) {
-    const ai = ctx.ai;
-    const topUp = (async function* (): AsyncGenerator<WebEvent> {
-      try {
-        yield* aiWeb({ query: q, signal: ctx.signal, ai, start: collections.length, count: missing, perCollection: ctx.config.fragmentsPerCluster, avoid: collections.map(c => c.label) });
-      } catch (err) {
-        if (err instanceof WebsError && err.code !== 'cancelled') yield { type: 'warning', message: `Couldn't add AI collections: ${err.message}` };
-        else throw err;
-      }
-    })();
-    yield* interleave(kbWeb(ctx, q, retrieval, marks), topUp);
-    return;
-  }
+  const ai = ctx.ai?.topUp ? ctx.ai : null;
+  const topUp = (start: number, count: number, avoid: string[]) => (async function* (): AsyncGenerator<WebEvent> {
+    try {
+      yield* aiWeb({ query: q, signal: ctx.signal, ai: ai!, start, count, perCollection: ctx.config.fragmentsPerCluster, avoid });
+    } catch (err) {
+      if (err instanceof WebsError && err.code !== 'cancelled') yield { type: 'warning', message: `Couldn't add AI collections: ${err.message}` };
+      else throw err;
+    }
+  })();
 
-  yield* kbWeb(ctx, q, retrieval, marks);
+  // The narrator may set passages aside once it has read them, so how much of the local web survives is only known at
+  // the end. Watch which cards stay, and if the web ended up thinner than asked for, the AI writes the rest then.
+  const kept = new Map<string, boolean>(); // "cluster:slot" → still on the canvas
+  async function* watched(src: AsyncGenerator<WebEvent>): AsyncGenerator<WebEvent> {
+    for await (const e of src) {
+      if (e.type === 'fragment' && e.cluster < collections.length) kept.set(`${e.cluster}:${e.slot}`, !e.fragment.dropped);
+      yield e;
+    }
+  }
+  const local = watched(kbWeb(ctx, q, retrieval, marks));
+  const first = ai && missing > 0 ? interleave(local, topUp(collections.length, missing, collections.map(c => c.label))) : local;
+  yield* first;
+
+  if (ai) {
+    const survivingLocal = new Set([...kept].filter(([, v]) => v).map(([k]) => k.split(':')[0])).size;
+    const have = survivingLocal + Math.max(0, missing);
+    const short = wanted - have;
+    if (short > 0 && !ctx.signal.aborted) {
+      yield { type: 'status', message: `Some of what was found didn't fit — asking ${ai.model} for ${short} more…` };
+      yield* topUp(collections.length + Math.max(0, missing), short, collections.map(c => c.label));
+    }
+  }
 };
 
 /** What marks a card as coming from a reference library rather than the user's notes. */

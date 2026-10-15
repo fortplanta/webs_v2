@@ -153,4 +153,27 @@ describe('groundedWhen', () => {
     expect(groundedWhen('sometime in the 1600s', src)).toBeUndefined();
     expect(groundedWhen(undefined, src)).toBeUndefined();
   });
+
+  it('asks the AI for more when the narrator set aside so much that the web is thinner than asked for', async () => {
+    const mk = (n: number, text: string) => ({ id: `a.md#${n}`, source: 'a.md', text, lens: 'direct', heading: `h${n}`, terms: ['stoic'], score: { value: 5, rel: 1, conn: 0, nov: 1, red: 0 } });
+    const retriever: Retriever = {
+      retrieve: async q => ({ query: q, terms: ['stoic'], considered: 2, collections: [{ lens: 'direct', label: 'The thing itself', verb: 'led to', passages: [mk(0, 'One stoic passage here.'), mk(1, 'Another stoic passage here.')] }] }),
+      retrieveFromCard: async () => ({ query: '', terms: [], collections: [], considered: 0 }),
+    };
+    const outlineWith = (skip: string[]) => JSON.stringify({ context: 'Context.', skip, clusters: [{ title: 'where it started' }], edges: [] });
+    const aiOutline = JSON.stringify({ context: 'About it.', clusters: [{ title: 'Another angle', edge: 'led to' }] });
+    const aiCard = JSON.stringify({ cluster: 0, type: 'concept', title: 'an ai card', body: 'Body.', bridge: 'b' }) + '\n';
+    const llm: LlmService = {
+      // the local web: the narrator sets both passages aside; the AI answers with an outline and one card
+      call: async o => (/canvas planner/.test(o.system) ? aiOutline : outlineWith(['P1', 'P2'])),
+      async *stream(o) { if (/canvas writer/.test(o.system) && /^Collection:/m.test(o.user)) { yield aiCard; return; } if (/canvas writer/.test(o.system)) { yield aiCard; return; } },
+    };
+    const ai = { llm, model: 'm', topUp: true };
+    const out: WebEvent[] = [];
+    for await (const e of runStrategy('stoicism', { strategy: 'lensed', signal: new AbortController().signal, retriever, llm, ai, library: null, config: { clusterCount: 2, fragmentsPerCluster: 1 } })) out.push(e);
+    expect(out.some(e => e.type === 'status' && /didn't fit/.test((e as any).message))).toBe(true);
+    const outlines = out.filter(e => e.type === 'ai-outline') as any[];
+    expect(outlines.length).toBeGreaterThanOrEqual(1);
+    expect((out.filter(e => e.type === 'fragment') as any[]).some(e => e.fragment.origin === 'ai')).toBe(true);
+  });
 });
