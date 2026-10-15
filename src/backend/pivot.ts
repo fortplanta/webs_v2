@@ -9,7 +9,7 @@ import { WebsError } from './errors';
 import type { GeneratedFragment, PivotEvent, PivotRequest } from './events';
 import type { LlmService } from './llm';
 import { ollamaLlm } from './llm';
-import { cardMeta, JsonObjectStream, parseJsonObject } from './parse';
+import { cardMeta, parseJsonObject, streamObjects } from './parse';
 import {
   buildPivotFragmentsMessage, buildPivotOverviewMessage, LENSED_FRAGMENTS_SYSTEM_PROMPT, PIVOT_OVERVIEW_SYSTEM_PROMPT, passageIds,
 } from './prompts';
@@ -52,11 +52,10 @@ async function* run(req: PivotRequest, opts: Required<PivotOptions>): AsyncGener
 
     yield { type: 'status', message: 'Writing cards…' };
     const ids = passageIds([collection])[0];
-    const parser = new JsonObjectStream();
     const done = new Set<number>();
     const stream = opts.llm.stream({ system: LENSED_FRAGMENTS_SYSTEM_PROMPT, user: buildPivotFragmentsMessage(card, title, collection), maxTokens: 3000 }, opts.signal);
-    for await (const chunk of stream) {
-      for (const obj of parser.feed(chunk)) {
+    {
+      for await (const obj of streamObjects(stream, opts.llm, opts.signal)) {
         const meta = cardMeta(obj);
         if (!meta) continue;
         const open = collection.passages.map((p, i) => ({ p, i })).filter(x => !done.has(x.i));

@@ -5,22 +5,13 @@ import { WebsError } from '../errors';
 import type { WebEvent } from '../events';
 import { formatPassages } from '../kb';
 import { buildFragmentsMessage, buildOverviewMessage, FRAGMENTS_SYSTEM_PROMPT, OVERVIEW_SYSTEM_PROMPT } from '../prompts';
-import { JsonObjectStream, normalizeFragment, parseOverview, type Overview } from '../parse';
+import { normalizeFragment, parseOverview, streamObjects, type Overview } from '../parse';
+import { callJson } from '../repair';
 import type { Strategy, StrategyContext } from './types';
 
 async function fetchOverview(ctx: StrategyContext, kbText: string): Promise<Overview> {
   const user = buildOverviewMessage(ctx.query, kbText, ctx.config);
-  let lastErr: unknown;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const raw = await ctx.llm.call({ system: OVERVIEW_SYSTEM_PROMPT, user, json: true, maxTokens: 800 }, ctx.signal);
-    try {
-      return parseOverview(raw);
-    } catch (err) {
-      if (!(err instanceof WebsError) || err.code !== 'bad-json') throw err;
-      lastErr = err;
-    }
-  }
-  throw lastErr;
+  return callJson(ctx.llm, { system: OVERVIEW_SYSTEM_PROMPT, user, json: true, maxTokens: 800 }, parseOverview, ctx.signal);
 }
 
 export const progressive: Strategy = async function* (ctx) {
@@ -49,14 +40,13 @@ export const progressive: Strategy = async function* (ctx) {
   // 3. Fragments — streamed; each is emitted the moment its object closes.
   yield { type: 'status', message: 'Writing fragments…' };
   const filled = overview.titles.map(() => 0);
-  const parser = new JsonObjectStream();
   let count = 0;
   const stream = ctx.llm.stream(
     { system: FRAGMENTS_SYSTEM_PROMPT, user: buildFragmentsMessage(q, kbText, overview.context, overview.titles, ctx.config), maxTokens: 4000 },
     ctx.signal,
   );
-  for await (const chunk of stream) {
-    for (const obj of parser.feed(chunk)) {
+  {
+    for await (const obj of streamObjects(stream, ctx.llm, ctx.signal)) {
       const fragment = normalizeFragment(obj);
       if (!fragment) continue;
       const cluster = pickCluster((obj as any).cluster, filled, slots);

@@ -2,6 +2,8 @@
 
 import type { FragmentType } from '../types/fragments';
 import { WebsError } from './errors';
+import type { LlmService } from './llm';
+import { repairParse, repairViaModel } from './repair';
 import type { GeneratedFragment, OverviewEdge } from './events';
 
 const GENERATED_TYPES: FragmentType[] = ['person', 'concept', 'thesis', 'source', 'event', 'era', 'domain', 'quote'];
@@ -15,6 +17,16 @@ export class JsonObjectStream {
   private inString = false;
   private escaped = false;
   private current = '';
+  /** Objects that were not valid JSON even after local repair (see repairViaModel for a second chance). */
+  rejected: string[] = [];
+
+  /** The stream ended: an object still open was cut off. Close it off if what was written makes sense. */
+  end(): unknown[] {
+    if (this.depth === 0) return [];
+    const fixed = repairParse(this.current);
+    this.depth = 0; this.current = ''; this.inString = false;
+    return fixed && typeof fixed === 'object' ? [fixed] : [];
+  }
 
   feed(chunk: string): unknown[] {
     const out: unknown[] = [];
@@ -31,7 +43,10 @@ export class JsonObjectStream {
       } else if (ch === '"') this.inString = true;
       else if (ch === '{') this.depth++;
       else if (ch === '}' && --this.depth === 0) {
-        try { out.push(JSON.parse(this.current)); } catch { /* skip malformed object */ }
+        try { out.push(JSON.parse(this.current)); } catch {
+          const fixed = repairParse(this.current);
+          if (fixed && typeof fixed === 'object') out.push(fixed); else this.rejected.push(this.current);
+        }
         this.current = '';
       }
     }
@@ -39,14 +54,31 @@ export class JsonObjectStream {
   }
 }
 
+/**
+ * Each JSON object in a model's stream, as it completes. Damaged ones are repaired on the spot; an object cut off at
+ * the end is closed off; and the few that cannot be repaired locally get one try with the model.
+ */
+export async function* streamObjects(stream: AsyncIterable<string>, llm: LlmService, signal?: AbortSignal): AsyncGenerator<unknown> {
+  const parser = new JsonObjectStream();
+  for await (const chunk of stream) yield* parser.feed(chunk);
+  yield* parser.end();
+  for (const bad of parser.rejected.slice(0, 3)) {
+    const fixed = await repairViaModel(llm, bad, signal);
+    if (fixed && typeof fixed === 'object') yield fixed;
+  }
+}
+
 /** Extract the single top-level JSON object from a (possibly fenced) response. */
 export function parseJsonObject(raw: string): any {
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
-  if (start < 0 || end <= start) throw new WebsError('bad-json', 'Model response contained no JSON object.');
+  if (start < 0) throw new WebsError('bad-json', 'Model response contained no JSON object.');
   try {
+    if (end <= start) throw new Error('unterminated');
     return JSON.parse(raw.slice(start, end + 1));
   } catch (e) {
+    const fixed = repairParse(raw.slice(start));
+    if (fixed && typeof fixed === 'object' && !Array.isArray(fixed)) return fixed;
     throw new WebsError('bad-json', `Model response was not valid JSON (${(e as Error).message}).`);
   }
 }

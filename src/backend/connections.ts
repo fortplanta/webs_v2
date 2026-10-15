@@ -8,6 +8,7 @@ import { ollamaLlm, type LlmService } from './llm';
 import { checkNumbers, NARRATOR_VOICE, sentenceCase } from './narration';
 import { configuredProvider } from './provider';
 import { parseJsonObject } from './parse';
+import { callJson } from './repair';
 
 const SYSTEM = `You judge a link between two cards on a research canvas, from your general knowledge.
 
@@ -39,13 +40,7 @@ export async function judgeConnection(req: ConnectRequest, opts: { signal?: Abor
   const user = `Card A: ${text(req.a)}\nCard B: ${text(req.b)}\n\n${explanation ? `The user says they are connected like this: "${explanation}"` : 'The user has not said how they are connected. Say whether you can see a real link.'}`;
   const sources = `${req.a.title} ${req.a.original ?? req.a.body} ${req.b.title} ${req.b.original ?? req.b.body} ${explanation}`;
   try {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const raw = await llm.call({ system: SYSTEM, user, json: true, maxTokens: 300, temperature: 0.3 }, opts.signal);
-      try { return { ok: true, verdict: parseVerdict(raw, sources) }; } catch (err) {
-        if (!(err instanceof WebsError) || err.code !== 'bad-json' || attempt === 1) throw err;
-      }
-    }
-    return { ok: false, message: 'No answer.' };
+    return { ok: true, verdict: await callJson(llm, { system: SYSTEM, user, json: true, maxTokens: 300, temperature: 0.3 }, raw => parseVerdict(raw, sources), opts.signal) };
   } catch (err) {
     if (err instanceof WebsError && err.code === 'cancelled') return { ok: false, message: 'Cancelled.' };
     return { ok: false, message: err instanceof Error ? err.message : String(err) };

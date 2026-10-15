@@ -16,7 +16,8 @@ import {
   buildLensedFragmentsMessage, buildLensedOverviewMessage, LENSED_FRAGMENTS_SYSTEM_PROMPT, LENSED_OVERVIEW_SYSTEM_PROMPT, passageIds,
 } from '../prompts';
 import { candidatePairs, checkClaims, checkRetelling, clampWeight, groundedWhen, restoreNames, sentenceCase, sharedTerms, weightFor } from '../narration';
-import { cardMeta, JsonObjectStream, parseLensedOverview } from '../parse';
+import { cardMeta, parseLensedOverview, streamObjects } from '../parse';
+import { callJson } from '../repair';
 import type { LibraryRetrieval } from '../library/service';
 import { wikipediaOrigin } from '../library/images';
 import type { Collection, SelectedPassage } from '../retrieval/retrieve';
@@ -184,14 +185,7 @@ async function* kbCards(ctx: Parameters<Strategy>[0], q: string, retrieval: Awai
   // 3. the model: overview, then cards (a failure here leaves the KB-derived web on the canvas)
   try {
     yield { type: 'status', message: 'Outlining…' };
-    let outline: ReturnType<typeof parseLensedOverview> | null = null;
-    for (let attempt = 0; attempt < 2 && !outline; attempt++) {
-      const raw = await ctx.llm.call({ system: LENSED_OVERVIEW_SYSTEM_PROMPT, user: buildLensedOverviewMessage(q, collections), json: true, maxTokens: 900 }, ctx.signal);
-      try { outline = parseLensedOverview(raw, collections.length); } catch (err) {
-        if (!(err instanceof WebsError) || err.code !== 'bad-json' || attempt === 1) throw err;
-      }
-    }
-    const o = outline!;
+    const o = await callJson(ctx.llm, { system: LENSED_OVERVIEW_SYSTEM_PROMPT, user: buildLensedOverviewMessage(q, collections), json: true, maxTokens: 900 }, raw => parseLensedOverview(raw, collections.length), ctx.signal);
     yield {
       type: 'overview', context: o.context,
       clusters: collections.map((c, i) => ({ title: o.titles[i] ?? c.label, slots: c.passages.length, lens: c.lens, ...(marks ? { origin: marks.origin } : {}) })),
@@ -211,13 +205,12 @@ async function* kbCards(ctx: Parameters<Strategy>[0], q: string, retrieval: Awai
     const pairs = candidatePairs([...where].filter(([id]) => !done.has(id)).map(([id, w]) => ({ id, terms: w.p.terms })), retrieval.terms);
 
     yield { type: 'status', message: 'Writing cards…' };
-    const parser = new JsonObjectStream();
     const stream = ctx.llm.stream(
       { system: LENSED_FRAGMENTS_SYSTEM_PROMPT, user: buildLensedFragmentsMessage(q, o.context, collections, skipped, pairs), maxTokens: 6000 },
       ctx.signal,
     );
-    for await (const chunk of stream) {
-      for (const obj of parser.feed(chunk)) {
+    {
+      for await (const obj of streamObjects(stream, ctx.llm, ctx.signal)) {
         const named = String((obj as any).passage ?? '').toUpperCase().replace(/[^P0-9]/g, '');
         if ((obj as any).fits === false && where.has(named) && !done.has(named)) {
           done.add(named);

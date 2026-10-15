@@ -8,7 +8,8 @@ import { WebsError } from '../errors';
 import type { GeneratedFragment, OverviewEdge, WebEvent } from '../events';
 import type { LlmService } from '../llm';
 import { AI_CARDS_SYSTEM_PROMPT, AI_OUTLINE_SYSTEM_PROMPT, buildAiCardsMessage, buildAiOutlineMessage } from '../prompts';
-import { JsonObjectStream, normalizeFragment, parseJsonObject } from '../parse';
+import { normalizeFragment, parseJsonObject, streamObjects } from '../parse';
+import { callJson } from '../repair';
 
 export interface AiContext {
   llm: LlmService;
@@ -56,25 +57,17 @@ export async function* aiWeb(opts: { query: string; signal: AbortSignal; ai: AiC
   const { query, signal, ai, start, count, perCollection, avoid = [] } = opts;
   yield { type: 'status', message: `Nothing in your notes${start > 0 ? ' for the rest' : ''} — asking ${ai.model}…` };
 
-  let outline: Outline | null = null;
-  for (let attempt = 0; attempt < 2 && !outline; attempt++) {
-    const raw = await ai.llm.call({ system: AI_OUTLINE_SYSTEM_PROMPT, user: buildAiOutlineMessage(query, count, avoid), json: true, maxTokens: 900 }, signal);
-    try { outline = parseAiOutline(raw, count); } catch (err) {
-      if (!(err instanceof WebsError) || err.code !== 'bad-json' || attempt === 1) throw err;
-    }
-  }
-  const o = outline!;
+  const o = await callJson(ai.llm, { system: AI_OUTLINE_SYSTEM_PROMPT, user: buildAiOutlineMessage(query, count, avoid), json: true, maxTokens: 900 }, raw => parseAiOutline(raw, count), signal);
   // Collection 0 of the whole web is the hub (the AI's own first collection when the KB had nothing).
   const hub = 0;
   const edges: OverviewEdge[] = o.titles.map((_, i) => ({ source: hub, target: start + i, label: o.edgeLabels[i] })).filter(e => e.source !== e.target);
   yield { type: 'ai-outline', start, context: o.context, clusters: o.titles.map(title => ({ title, slots: perCollection })), edges, model: ai.model };
 
   yield { type: 'status', message: `${ai.model} is writing cards…` };
-  const parser = new JsonObjectStream();
   const used = o.titles.map(() => 0);
   let written = 0;
-  for await (const chunk of ai.llm.stream({ system: AI_CARDS_SYSTEM_PROMPT, user: buildAiCardsMessage(query, o.context, o.titles, perCollection), maxTokens: 4500 }, signal)) {
-    for (const obj of parser.feed(chunk)) {
+  {
+    for await (const obj of streamObjects(ai.llm.stream({ system: AI_CARDS_SYSTEM_PROMPT, user: buildAiCardsMessage(query, o.context, o.titles, perCollection), maxTokens: 4500 }, signal), ai.llm, signal)) {
       const fragment = fromAi(obj, ai.model);
       if (!fragment) continue;
       let c = Number((obj as any).cluster);
