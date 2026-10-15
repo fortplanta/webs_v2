@@ -177,3 +177,13 @@ describe('groundedWhen', () => {
     expect((out.filter(e => e.type === 'fragment') as any[]).some(e => e.fragment.origin === 'ai')).toBe(true);
   });
 });
+
+import { tangentEdges } from '../src/backend/strategies/lensed';
+describe('tangentEdges', () => {
+  const col = (terms: string[]) => ({ lens: 'direct', label: 'x', verb: 'v', passages: [{ id: 'p', source: 's', text: '', lens: 'direct', heading: '', terms, score: { value: 1, rel: 1, conn: 0, nov: 1, red: 0 } }] }) as any;
+  it('believes a link between collections only when they share real vocabulary beyond the question', () => {
+    const cols = [col(['glass', 'window', 'abbey', 'monk', 'saint']), col(['abbey', 'monk', 'saint', 'window', 'glass']), col(['mirror', 'myth', 'beauty', 'flaw', 'glass'])];
+    const edges = [{ source: 0, target: 1, label: 'grew out of' }, { source: 0, target: 2, label: 'led to' }];
+    expect(tangentEdges(edges, cols, ['glass'])).toEqual([edges[0]]);
+  });
+});

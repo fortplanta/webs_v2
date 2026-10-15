@@ -60,8 +60,8 @@ export async function* aiWeb(opts: { query: string; signal: AbortSignal; ai: AiC
   const o = await callJson(ai.llm, { system: AI_OUTLINE_SYSTEM_PROMPT, user: buildAiOutlineMessage(query, count, avoid), json: true, maxTokens: 900 }, raw => parseAiOutline(raw, count), signal);
   // Collection 0 of the whole web is the hub (the AI's own first collection when the KB had nothing).
   const hub = 0;
-  const edges: OverviewEdge[] = o.titles.map((_, i) => ({ source: hub, target: start + i, label: o.edgeLabels[i] })).filter(e => e.source !== e.target);
-  yield { type: 'ai-outline', start, context: o.context, clusters: o.titles.map(title => ({ title, slots: perCollection })), edges, model: ai.model };
+  // every collection hangs off the origin (its label is its own `edge`); links between collections are only for real tangents
+  yield { type: 'ai-outline', start, context: o.context, clusters: o.titles.map((title, i) => ({ title, slots: perCollection, edge: o.edgeLabels[i] })), edges: [], model: ai.model };
 
   yield { type: 'status', message: `${ai.model} is writing cards…` };
   const used = o.titles.map(() => 0);

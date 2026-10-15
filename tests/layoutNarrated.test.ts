@@ -12,6 +12,26 @@ const model = (slots: Array<any | null>[], context = 'The through-line.') => {
 };
 const ids = (sk: Array<Record<string, any>>) => sk.map(e => e.id as string);
 
+describe('how collections hang together', () => {
+  const built = () => {
+    let m = initialModel('q');
+    m = reduce(m, { type: 'overview', context: 'c', clusters: [{ title: 'a', slots: 1, edge: 'led to' }, { title: 'b', slots: 1, edge: 'contested by' }, { title: 'c', slots: 1 }], edges: [{ source: 1, target: 2, label: 'grew into' }] });
+    for (let i = 0; i < 3; i++) m = reduce(m, { type: 'fragment', cluster: i, slot: 0, fragment: frag(`f${i}`) });
+    return buildSkeletons(reduce(m, { type: 'done' })) as Array<Record<string, any>>;
+  };
+  it('every collection is joined to the origin, labelled with how it relates to the question', () => {
+    const sk = built();
+    const links = sk.filter(e => /^origin-/.test(e.id));
+    expect(links.map(e => [e.start.id, e.end.id])).toEqual([['seed', 'cluster-0'], ['seed', 'cluster-1'], ['seed', 'cluster-2']]);
+    expect(links.map(e => e.label?.text)).toEqual(['led to', 'contested by', undefined]);
+    expect(links.every(e => e.endArrowhead === null && e.customData.directed)).toBe(true);
+  });
+  it('collections are joined to each other only by a stated tangent, never all to the first one', () => {
+    const edges = built().filter(e => /^edge-/.test(e.id));
+    expect(edges.map(e => [e.start.id, e.end.id, e.label.text])).toEqual([['cluster-1', 'cluster-2', 'grew into']]);
+  });
+});
+
 describe('placeholders for cards that never arrived', () => {
   it('draws a faint placeholder and its line while the web is being written, and neither once it is finished', () => {
     const running = model([[frag('a'), null, null]]);

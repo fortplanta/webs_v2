@@ -59,6 +59,7 @@ export interface GeneratedFragment {
   aiModel?: string;
 }
 
+/** A link between two collections: only where one genuinely arises from the other (a tangent). Every collection already hangs off the origin. */
 export interface OverviewEdge {
   source: number; // cluster index
   target: number; // cluster index
@@ -68,10 +69,10 @@ export interface OverviewEdge {
 export type WebEvent =
   | { type: 'status'; message: string }
   | { type: 'kb'; passages: KbPassage[] }
-  | { type: 'overview'; context: string; clusters: Array<{ title: string; slots: number; lens?: string; origin?: 'wiki' }>; edges: OverviewEdge[] }
+  | { type: 'overview'; context: string; clusters: Array<{ title: string; slots: number; lens?: string; origin?: 'wiki'; edge?: string }>; edges: OverviewEdge[] }
   | { type: 'fragment'; cluster: number; slot: number; fragment: GeneratedFragment }
   /** Collections written by the user's AI provider, from index `start` on (0 when the KB found nothing). */
-  | { type: 'ai-outline'; start: number; context: string; clusters: Array<{ title: string; slots: number }>; edges: OverviewEdge[]; model: string }
+  | { type: 'ai-outline'; start: number; context: string; clusters: Array<{ title: string; slots: number; edge?: string }>; edges: OverviewEdge[]; model: string }
   /** A picture for the card at (cluster, slot), fetched in the background; the canvas places it beside the card. */
   | { type: 'image'; cluster: number; slot: number; image: WebImage }
   /** Something went wrong with an optional part (e.g. the AI top-up); the web carries on without it. */

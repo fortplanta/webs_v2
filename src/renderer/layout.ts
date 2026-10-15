@@ -5,7 +5,7 @@
 // around it, each collection a header on a wider ring. From there it decentralises: a collection's cards branch outward
 // from their header, staggered, the most important one leading, and every card is a point new growth can leave from in
 // its own direction. Cards hang off their header by a thin tether line (which also keeps them near it); headers are
-// joined by labelled edges.
+// joined to the origin by labelled lines (and to each other only where one grows out of another).
 
 import { cardLook, cardSize, cardTextSkeletons, groupFor } from './card';
 import { clip, clusterLabel, FRAG_H, FRAG_W, HEADER_H, wrap, edgeLabel } from './boxes';
@@ -117,7 +117,16 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
     });
   }));
 
-  // Labelled edges between collections, and the topic's link to the first one
+  // Every collection hangs directly off the origin: a labelled line from the question to its header...
+  m.clusters.forEach((cluster, ci) => {
+    if (hidden.has(ci)) return;
+    arrows.push({
+      type: 'arrow', roughness: 0, id: `origin-${ci}`, x: 0, y: 0, start: { id: 'seed' }, end: { id: `cluster-${ci}` },
+      strokeColor: EDGE(), strokeWidth: 1, opacity: 70, endArrowhead: null, customData: { directed: true },
+      ...(cluster.edge ? { label: edgeLabel(cluster.edge) } : {}),
+    });
+  });
+  // ...and a line between two collections only where one genuinely grows out of the other (a tangent)
   m.edges.forEach((edge, i) => {
     if (!m.clusters[edge.source] || !m.clusters[edge.target] || hidden.has(edge.source) || hidden.has(edge.target)) return;
     arrows.push({
@@ -127,10 +136,6 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
       ...(edge.label ? { label: edgeLabel(edge.label) } : {}),
     });
   });
-  const first = m.clusters.findIndex((_, i) => !hidden.has(i));
-  if (first >= 0) {
-    arrows.push({ type: 'arrow', roughness: 0, id: 'seed-link', x: 0, y: 0, start: { id: 'seed' }, end: { id: `cluster-${first}` }, strokeColor: EDGE(), strokeWidth: 1, opacity: 70, endArrowhead: null, customData: { directed: true } });
-  }
 
   return [...out, ...arrows];
 }

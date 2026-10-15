@@ -45,8 +45,14 @@ export function provisionalFragment(p: SelectedPassage, collection: Collection, 
   };
 }
 
-export function defaultEdges(collections: Collection[]): OverviewEdge[] {
-  return collections.slice(1).map((c, i) => ({ source: 0, target: i + 1, label: c.verb }));
+/**
+ * Links between collections: only a tangent, where one genuinely arises from the other. The model proposes them, and a
+ * link is believed only if the two collections share real vocabulary beyond the question (the same test as a link
+ * between cards). Every collection hangs off the origin anyway; this is for the rarer case of one growing out of another.
+ */
+export function tangentEdges(proposed: OverviewEdge[], collections: Collection[], questionTerms: Iterable<string>): OverviewEdge[] {
+  const terms = collections.map(c => c.passages.flatMap(p => p.terms));
+  return proposed.filter(e => sharedTerms(terms[e.source] ?? [], terms[e.target] ?? [], questionTerms) >= 4);
 }
 
 /** The passage a card most plausibly came from, when the model's id is missing or wrong. */
@@ -193,8 +199,8 @@ async function* kbCards(ctx: Parameters<Strategy>[0], q: string, retrieval: Awai
   // 2. instant skeleton + excerpt cards (the selected passages ARE the cards, so no separate KB column)
   yield {
     type: 'overview', context: '',
-    clusters: collections.map(c => ({ title: c.label, slots: c.passages.length, lens: c.lens, ...(marks ? { origin: marks.origin } : {}) })),
-    edges: defaultEdges(collections),
+    clusters: collections.map(c => ({ title: c.label, slots: c.passages.length, lens: c.lens, edge: c.verb, ...(marks ? { origin: marks.origin } : {}) })),
+    edges: [],
   };
   for (const [, w] of where) yield { type: 'fragment', cluster: w.cluster, slot: w.slot, fragment: { ...provisionalFragment(w.p, collections[w.cluster], bestScore), ...marks?.of(w.p) } };
 
@@ -204,8 +210,8 @@ async function* kbCards(ctx: Parameters<Strategy>[0], q: string, retrieval: Awai
     const o = await callJson(ctx.llm, { system: LENSED_OVERVIEW_SYSTEM_PROMPT, user: buildLensedOverviewMessage(q, collections), json: true, maxTokens: 900 }, raw => parseLensedOverview(raw, collections.length), ctx.signal);
     yield {
       type: 'overview', context: o.context,
-      clusters: collections.map((c, i) => ({ title: o.titles[i] ?? c.label, slots: c.passages.length, lens: c.lens, ...(marks ? { origin: marks.origin } : {}) })),
-      edges: o.edges.length ? o.edges : defaultEdges(collections),
+      clusters: collections.map((c, i) => ({ title: o.titles[i] ?? c.label, slots: c.passages.length, lens: c.lens, edge: o.edgeLabels[i] ?? c.verb, ...(marks ? { origin: marks.origin } : {}) })),
+      edges: tangentEdges(o.edges, collections, retrieval.terms),
     };
 
     // The narrator's first judgement: passages that don't bear on the question are set aside, not forced into the story.

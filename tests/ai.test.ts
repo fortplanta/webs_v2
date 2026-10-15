@@ -139,7 +139,8 @@ describe('AI web', () => {
     expect(evs.map(e => e.type)).toEqual(['status', 'ai-outline', 'status', 'fragment', 'fragment', 'fragment', 'status', 'fragment', 'done']);
     const o = evs.find(e => e.type === 'ai-outline') as any;
     expect(o).toMatchObject({ start: 0, model: 'test-model', clusters: [{ title: 'Airships', slots: 2 }, { title: 'Disasters', slots: 2 }] });
-    expect(o.edges).toEqual([{ source: 0, target: 1, label: 'ended with' }]);
+    expect(o.edges).toEqual([]);                                        // collections hang off the origin, not off the first collection
+    expect(o.clusters.map((c: any) => c.edge)).toEqual(['led to', 'ended with']);
     const frags = evs.filter(e => e.type === 'fragment') as any[];
     expect(frags.map(f => [f.cluster, f.slot])).toEqual([[0, 0], [1, 0], [0, 1], [1, 1]]);
     for (const f of frags) {

@@ -117,15 +117,16 @@ Return ONLY valid JSON matching this exact shape:
 {
   "context": "the through-line: 2-4 sentences in your voice on how these pieces add up to the question, using only what the passages say",
   "verdicts": { "P1": "fits", "P2": "off-topic" },
-  "clusters": [ { "title": "2-4 words, in your voice, naming what this collection shows about the question" } ],
-  "edges": [ { "source": 0, "target": 1, "label": "verb phrase" } ]
+  "clusters": [ { "title": "2-4 words, in your voice, naming what this collection shows about the question", "edge": "verb phrase: how this collection relates to the question itself" } ],
+  "edges": [ { "source": 1, "target": 2, "label": "verb phrase" } ]
 }
 
 Rules:
 - First judge EVERY passage and give a verdict for each id in "verdicts": "fits" or "off-topic". A passage fits only if it is really about the question's subject. It does NOT fit just because it shares a word with the question ("true", "scientist", "find") while being about something else, like a film, a recipe or an animal. Be strict: an honest short story beats a stretched long one.
 - Build the through-line and titles from the passages you did not skip.
 - Exactly ${collections.length} clusters, in the same order as the collections above.
-- "source" and "target" are 0-based collection indexes. Connect collection 0 to each of the others, and add a link between two others only when the passages clearly support it.
+- Every collection hangs directly off the question, so each cluster's "edge" says how it relates to the question itself.
+- "edges" links two collections to each other, by 0-based index, and only when one genuinely arises from the other (a tangent that has its roots in it). Usually it is empty. Never link a collection to the first one just because it is first.
 - Edge labels are verb phrases, not nouns: "led to", "put to use in", "contested by".
 - Use only the passages above. Do not add facts, names, dates or numbers that are not in them; you are connecting what is there, not extending it.
 - Return raw JSON only. Start with { and end with }.`;

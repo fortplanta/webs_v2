@@ -27,7 +27,7 @@ export function reduce(m: WebModel, ev: WebEvent): WebModel {
           ...ev.clusters.map((c, i) => {
             const prev = m.clusters[i];
             const slots = prev && prev.slots.length === c.slots ? prev.slots : Array.from({ length: c.slots }, () => null);
-            return { title: c.title, lens: c.lens ?? prev?.lens, ...(c.origin ?? prev?.origin ? { origin: c.origin ?? prev?.origin } : {}), slots };
+            return { title: c.title, lens: c.lens ?? prev?.lens, ...(c.origin ?? prev?.origin ? { origin: c.origin ?? prev?.origin } : {}), ...(c.edge ?? prev?.edge ? { edge: c.edge ?? prev?.edge } : {}), slots };
           }),
           ...kept,
         ],
@@ -37,7 +37,7 @@ export function reduce(m: WebModel, ev: WebEvent): WebModel {
       const clusters = m.clusters.slice(0, ev.start);
       ev.clusters.forEach((c, i) => {
         const prev = m.clusters[ev.start + i];
-        clusters.push({ title: c.title, origin: 'ai', slots: prev?.slots.length === c.slots ? prev.slots : Array.from({ length: c.slots }, () => null) });
+        clusters.push({ title: c.title, origin: 'ai', ...(c.edge ? { edge: c.edge } : {}), slots: prev?.slots.length === c.slots ? prev.slots : Array.from({ length: c.slots }, () => null) });
       });
       return {
         ...m,

@@ -142,7 +142,7 @@ function resolveIndex(ref: unknown, titles: string[]): number {
 }
 
 /** Overview for the lensed strategy: one title per collection (by index) and edges between collections. */
-export function parseLensedOverview(raw: string, count: number): { context: string; titles: Array<string | null>; edges: OverviewEdge[]; skip: string[] } {
+export function parseLensedOverview(raw: string, count: number): { context: string; titles: Array<string | null>; edgeLabels: Array<string | null>; edges: OverviewEdge[]; skip: string[] } {
   const data = parseJsonObject(raw);
   const clusters: unknown[] = Array.isArray(data?.clusters) ? data.clusters : [];
   const titles = Array.from({ length: count }, (_, i) => {
@@ -150,6 +150,8 @@ export function parseLensedOverview(raw: string, count: number): { context: stri
     const t = typeof c === 'string' ? c : typeof c?.title === 'string' ? c.title : '';
     return t.trim() || null;
   });
+  // how each collection relates to the question itself (the label of its line from the origin)
+  const edgeLabels = Array.from({ length: count }, (_, i) => { const l = (clusters[i] as { edge?: unknown } | undefined)?.edge; return typeof l === 'string' && l.trim() ? l.trim().slice(0, 40) : null; });
   const edges: OverviewEdge[] = (Array.isArray(data?.edges) ? data.edges : [])
     .map((e: any) => ({ source: Number(e?.source), target: Number(e?.target), label: String(e?.label ?? '').trim() }))
     .filter((e: OverviewEdge) => Number.isInteger(e.source) && Number.isInteger(e.target) && e.source >= 0 && e.target >= 0 && e.source < count && e.target < count && e.source !== e.target && e.label);
@@ -158,5 +160,5 @@ export function parseLensedOverview(raw: string, count: number): { context: stri
   const verdicts = data?.verdicts && typeof data.verdicts === 'object' ? Object.entries(data.verdicts as Record<string, unknown>) : [];
   const fromVerdicts = verdicts.filter(([, v]) => /^(off|no|skip|irrelevant|not)/i.test(String(v))).map(([id]) => id.toUpperCase().replace(/[^P0-9]/g, ''));
   const skip = [...new Set([...fromList, ...fromVerdicts])];
-  return { context: String(data?.context ?? '').trim(), titles, edges, skip };
+  return { context: String(data?.context ?? '').trim(), titles, edgeLabels, edges, skip };
 }

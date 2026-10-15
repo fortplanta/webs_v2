@@ -162,7 +162,8 @@ describe('groundingScore', () => {
 describe('parseLensedOverview', () => {
   it('maps titles by index, pads missing ones, and keeps only valid labelled edges', () => {
     const o = parseLensedOverview(JSON.stringify({ context: ' c ', clusters: [{ title: 'A' }, { title: ' ' }], edges: [{ source: 0, target: 1, label: 'led to' }, { source: 0, target: 9, label: 'x' }, { source: 1, target: 1, label: 'self' }, { source: 0, target: 2, label: '' }] }), 3);
-    expect(o).toEqual({ context: 'c', titles: ['A', null, null], edges: [{ source: 0, target: 1, label: 'led to' }], skip: [] });
+    expect(o).toEqual({ context: 'c', titles: ['A', null, null], edgeLabels: [null, null, null], edges: [{ source: 0, target: 1, label: 'led to' }], skip: [] });
+    expect(parseLensedOverview(JSON.stringify({ clusters: [{ title: 'A', edge: ' led to ' }, { title: 'B' }] }), 2).edgeLabels).toEqual(['led to', null]); // how each collection relates to the question
   });
 });
 
@@ -195,7 +196,8 @@ describe('lensed strategy', () => {
     expect(seen[0].type).toBe('overview'); // the skeleton is the first thing on screen
     const overview = seen.find(e => e.type === 'overview') as Extract<WebEvent, { type: 'overview' }>;
     expect(overview.clusters.every(c => c.slots >= 1 && c.lens)).toBe(true);
-    expect(overview.edges.length).toBe(overview.clusters.length - 1);
+    expect(overview.edges).toEqual([]);                                 // every collection hangs off the origin, so no collection-to-collection links
+    expect(overview.clusters.every(c => c.edge)).toBe(true);              // each carries the label of its line from the origin
     const cards = seen.filter(e => e.type === 'fragment') as Array<Extract<WebEvent, { type: 'fragment' }>>;
     expect(cards.length).toBe(overview.clusters.reduce((n, c) => n + c.slots, 0));
     expect(cards[0].fragment).toMatchObject({ type: 'source', grounding: 1, draft: true });
@@ -214,7 +216,7 @@ describe('lensed strategy', () => {
     const overviews = evs.filter(e => e.type === 'overview') as Array<Extract<WebEvent, { type: 'overview' }>>;
     expect(overviews).toHaveLength(2);
     expect(overviews[1].clusters.map(c => c.title)).toEqual(['First', 'Second', 'Third'].slice(0, overviews[1].clusters.length));
-    expect(overviews[1].edges).toEqual([{ source: 0, target: 1, label: 'led to' }]);
+    expect(overviews[1].edges).toEqual([]); // the model's link between the first two is not backed by shared vocabulary, so it is not drawn
   });
 
   it('shows the passage in full as the card body, whatever the model writes', async () => {

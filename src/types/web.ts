@@ -8,6 +8,8 @@ export interface ClusterModel {
   lens?: string;
   /** 'ai' = written by the AI provider; 'wiki' = found in an offline reference library; absent = your notes. */
   origin?: 'ai' | 'wiki';
+  /** How this collection relates to the question itself ("led to", "contested by"): the label of its line from the origin. */
+  edge?: string;
   slots: Array<GeneratedFragment | null>;
 }
 
