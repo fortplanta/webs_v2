@@ -41,17 +41,27 @@ export function headerRing(n: number): Array<Pt & { angle: number }> {
   });
 }
 
-/** Angular offsets (degrees) for `k` cards around the outward direction. */
-export function fanAngles(k: number): number[] {
-  if (k <= 1) return [0];
-  const step = Math.min(55, 150 / (k - 1));
-  return Array.from({ length: k }, (_, j) => (j - (k - 1) / 2) * step);
+/**
+ * Where each of a collection's `k` cards sits relative to the way it grows outward. Not an arc of equals: the first
+ * card (the one that matters most) leads straight out, and the rest branch off either side of it, each a little
+ * further out than the last. That is what lets the web decentralise: the collections circle the origin, but within a
+ * collection the cards stagger and sprawl, and each becomes a point further growth can leave from in its own direction.
+ */
+export function fanSlots(k: number): Array<{ offset: number; reach: number }> {
+  return Array.from({ length: k }, (_, j) => {
+    if (j === 0) return { offset: 0, reach: 1 };
+    const ring = Math.ceil(j / 2), side = j % 2 === 1 ? 1 : -1;
+    return { offset: side * Math.min(100, 38 * ring), reach: 1 + 0.38 * ring };
+  });
 }
 
-/** Card centers for a header at `from`, fanning toward `angle` (degrees). Taller cards (`cardH`) are placed further out. */
+/** Angular offsets (degrees) of the cards from the outward direction, lead card first. */
+export const fanAngles = (k: number): number[] => fanSlots(k).map(s => s.offset);
+
+/** Card centers for a header at `from`, growing toward `angle` (degrees). Taller cards (`cardH`) are placed further out. Lead card first. */
 export function fanCenters(k: number, from: Pt, angle: number, cardH: number = FRAG_H): Pt[] {
-  const dist = FAN_DIST + 60 * Math.max(0, k - 3) + Math.max(0, cardH - FRAG_H) * 0.6;
-  return fanAngles(k).map(o => ({ x: from.x + Math.cos(rad(angle + o)) * dist, y: from.y + Math.sin(rad(angle + o)) * dist }));
+  const base = FAN_DIST + 40 * Math.max(0, k - 3) + Math.max(0, cardH - FRAG_H) * 0.6;
+  return fanSlots(k).map(({ offset, reach }) => ({ x: from.x + Math.cos(rad(angle + offset)) * base * reach, y: from.y + Math.sin(rad(angle + offset)) * base * reach }));
 }
 
 export interface Rect { x: number; y: number; width: number; height: number }
@@ -68,12 +78,14 @@ const overlaps = (a: Rect, b: Rect, gap: number) =>
   a.x < b.x + b.width + gap && b.x < a.x + a.width + gap && a.y < b.y + b.height + gap && b.y < a.y + a.height + gap;
 
 /**
- * Where a collection of `k` cards grown from `source` should go: outward from the middle of the canvas, as near the
- * source as there's room. Tries the outward direction first, then swings to either side, then farther out.
+ * Where a collection of `k` cards grown from `source` should go: further along the way `source` itself grew, i.e. away
+ * from `from` (what it hangs off: its collection's header, or the origin), as near the source as there's room. Growth
+ * direction is local to each card, not "away from the middle of the canvas", so branches diverge. Without `from` it
+ * falls back to away from the centre of everything. Tries that direction first, then swings to either side, then farther out.
  */
-export function findClusterSpot(boxes: readonly Rect[], source: Rect, k: number): { header: Pt; angle: number } {
+export function findClusterSpot(boxes: readonly Rect[], source: Rect, k: number, from?: Pt): { header: Pt; angle: number } {
   const all = boxes.length ? boxes : [source];
-  const cx = all.reduce((s, b) => s + b.x + b.width / 2, 0) / all.length, cy = all.reduce((s, b) => s + b.y + b.height / 2, 0) / all.length;
+  const cx = from?.x ?? all.reduce((s, b) => s + b.x + b.width / 2, 0) / all.length, cy = from?.y ?? all.reduce((s, b) => s + b.y + b.height / 2, 0) / all.length;
   const sx = source.x + source.width / 2, sy = source.y + source.height / 2;
   const outward = Math.hypot(sx - cx, sy - cy) < 1 ? 0 : (Math.atan2(sy - cy, sx - cx) * 180) / Math.PI;
   const swings = [0, 30, -30, 60, -60, 90, -90, 135, -135, 180];

@@ -3,6 +3,7 @@
 // style). Elements whose content changed (ghost → filled) take the new look but keep the user's position.
 
 import { convertToExcalidrawElements } from '@excalidraw/excalidraw';
+import { lockOrigin } from './origin';
 import { routeArrows } from './routeArrows';
 
 export { routeArrows };
@@ -27,7 +28,7 @@ export function convertWithStableIds(skeletons: unknown[]): El[] {
     }
     return next;
   });
-  return behindCards(routeArrows(mapped));
+  return lockOrigin(behindCards(routeArrows(mapped)));
 }
 
 /** Connector lines (and their labels) first, so every card is drawn over them. Stable otherwise. */

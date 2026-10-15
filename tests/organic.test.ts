@@ -14,14 +14,14 @@ describe('organic layout', () => {
     expect(r[0].angle).toBeCloseTo(-90);            // fans straight up
   });
 
-  it('fans cards symmetrically around the outward direction at equal distance', () => {
+  it('branches cards off the outward direction: the lead one straight out and nearest, the rest staggered either side and further', () => {
     expect(fanAngles(1)).toEqual([0]);
-    const a = fanAngles(3);
-    expect(a[1]).toBe(0); expect(a[0]).toBe(-a[2]);
+    expect(fanAngles(5)).toEqual([0, 38, -38, 76, -76]);
     const cs = fanCenters(3, { x: 0, y: 0 }, 0);
     const d = cs.map(c => Math.hypot(c.x, c.y));
-    expect(d[0]).toBeCloseTo(d[1]); expect(d[2]).toBeCloseTo(d[1]);
-    expect(cs[1].x).toBeGreaterThan(0);
+    expect(cs[0].y).toBeCloseTo(0); expect(cs[0].x).toBeGreaterThan(0);   // lead card straight out
+    expect(d[1]).toBeGreaterThan(d[0]); expect(d[2]).toBeCloseTo(d[1]);     // the flankers sit further out, evenly either side
+    expect(cs[1].y).toBeGreaterThan(0); expect(cs[2].y).toBeLessThan(0);
   });
 
   it('starts a whole web nearly collision-free, and the solver finishes the job', () => {
@@ -38,6 +38,14 @@ describe('organic layout', () => {
       const moved = out.nodes.reduce((s, n, i) => s + Math.hypot(n.x - nodes[i].x, n.y - nodes[i].y), 0) / nodes.length;
       expect(moved).toBeLessThan(120);
     }
+  });
+
+  it('grows a pivot on in the direction the card itself grew (away from what it hangs off), not away from the canvas middle', () => {
+    const source: Rect = { x: 900, y: -96, width: 280, height: 192 };
+    const around: Rect[] = [{ x: -220, y: -75, width: 440, height: 150 }, source];
+    const fromBelow = findClusterSpot(around, source, 3, { x: 1040, y: 700 });   // it hangs off something below it
+    expect(fromBelow.header.y).toBeLessThan(0);                                  // so growth carries on upward
+    expect(fromBelow.angle).toBeLessThan(-80); expect(fromBelow.angle).toBeGreaterThan(-100);
   });
 
   it('puts a pivot outward from the source, then swings or moves out when that spot is taken', () => {

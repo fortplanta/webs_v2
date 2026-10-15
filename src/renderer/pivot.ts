@@ -6,6 +6,7 @@ import { clusterLabel, edgeLabel, FRAG_H, FRAG_W, HEADER_H } from './boxes';
 import { addCard, cardSize } from './card';
 import { clusterFootprint, fanCenters, findClusterSpot } from './layout/organic';
 import { cssVar } from './theme';
+import { originCenter } from './origin';
 import { addBox, updateBox, type Build, type El } from './sceneEdit';
 
 /** KB passages already represented by a card on the canvas — a pivot must not repeat them. */
@@ -19,7 +20,7 @@ export function usedPassageIds(elements: El[]): string[] {
 }
 
 /**
- * Where a collection grown from `sourceId` goes: outward from the middle of the canvas, as close to the source card
+ * Where a collection grown from `sourceId` goes: on along the way the card itself grew, as close to the source card
  * as there's free room, numbered after the last collection. `x`/`y` is the header's top-left; `angle` the direction
  * its cards fan toward.
  */
@@ -29,7 +30,11 @@ export function placePivot(elements: El[], sourceId: string, cards = 3): { x: nu
   if (!source) return null;
   const index = Math.max(-1, ...live.filter(e => e.customData?.kind === 'cluster').map(e => e.customData.index)) + 1;
   const box = (e: El) => ({ x: e.x, y: e.y, width: e.width, height: e.height });
-  const { header, angle } = findClusterSpot(live.map(box), box(source), cards);
+  // Grow on in the direction this card itself grew: away from what it hangs off (its header), or from the origin.
+  const tether = elements.find(e => !e.isDeleted && e.type === 'arrow' && e.customData?.kind === 'tether' && e.endBinding?.elementId === sourceId);
+  const anchor = tether ? live.find(e => e.id === tether.startBinding?.elementId) : undefined;
+  const from = anchor ? { x: anchor.x + anchor.width / 2, y: anchor.y + anchor.height / 2 } : originCenter(elements) ?? undefined;
+  const { header, angle } = findClusterSpot(live.map(box), box(source), cards, from);
   return { x: header.x - FRAG_W / 2, y: header.y - HEADER_H / 2, index, angle };
 }
 

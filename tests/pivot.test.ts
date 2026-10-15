@@ -192,6 +192,15 @@ describe('pivot scene logic', () => {
     expect(placePivot(scene, 'nope')).toBeNull();
   });
 
+  it('grows a card\'s pivot away from the header it hangs off, and from the origin when it hangs off nothing', () => {
+    const els = [rect('seed', -220, -75, { width: 440, height: 150 }), head(0, 600), rect('c', 0, 100, { customData: frag(0, 0) }),
+      { id: 'tether-0-0', type: 'arrow', version: 1, x: 0, y: 0, width: 0, height: 0, customData: { kind: 'tether' }, startBinding: { elementId: 'cluster-0' }, endBinding: { elementId: 'c' } }] as El[];
+    const p = placePivot(els, 'c')!;
+    expect(p.angle).toBeLessThan(-45);        // the header is below the card, so it grows upward
+    const free = placePivot([els[0], rect('f', 1200, 0, { customData: frag(0, 1) })], 'f')!;
+    expect(Math.abs(free.angle)).toBeLessThan(10); // no header: away from the origin, to the right
+  });
+
   it('builds a header and one card per draft, fanned around it and tagged', () => {
     const cards: GeneratedFragment[] = [{ type: 'source', title: 'a', body: 'x', draft: true }, { type: 'source', title: 'b', body: 'y', draft: true }];
     const r = addPivotCluster(scene, { id: 'pv-1', x: 1000, y: 0, index: 2, angle: 0, title: 'New angle', lens: 'tension', fromCardId: 'f0', cards }, build);
@@ -201,8 +210,8 @@ describe('pivot scene logic', () => {
     const c0 = r.elements.find(e => e.id === 'pv-1-c0')!, c1 = r.elements.find(e => e.id === 'pv-1-c1')!;
     expect(c0.customData).toMatchObject({ kind: 'fragment', cluster: 2, slot: 0 });
     const away = (c: any) => Math.hypot(c.x + c.width / 2 - (1000 + 140), c.y + c.height / 2 - (0 + 24));
-    expect(away(c0)).toBeCloseTo(400); expect(away(c1)).toBeCloseTo(400); // equidistant from the header
-    expect(c0.y).not.toBe(c1.y);                                         // spread around it, not stacked
+    expect(away(c0)).toBeCloseTo(400); expect(away(c1)).toBeGreaterThan(away(c0)); // the lead card is nearest, the next sits further out
+    expect(c0.y).not.toBe(c1.y);                                                   // staggered, not stacked
   });
 
   it('links with a bound arrow drawn behind everything, with its label right after it', () => {

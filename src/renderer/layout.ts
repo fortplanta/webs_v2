@@ -1,9 +1,11 @@
 // WebModel → Excalidraw element skeletons. Rebuilt on every model change; ids are stable so the
 // canvas can merge updates in place (ghost slot → filled fragment) without disturbing user edits.
 //
-// Layout (see layout/organic.ts): the topic in the middle, the notes it was built from in a ring around it, each
-// collection a header on a wider ring with its cards fanned outward. Cards hang off their header by a thin tether
-// line (which also keeps them near it); headers are joined by labelled edges.
+// Layout (see layout/organic.ts): the topic fixed in the middle (centralised), the notes it was built from in a ring
+// around it, each collection a header on a wider ring. From there it decentralises: a collection's cards branch outward
+// from their header, staggered, the most important one leading, and every card is a point new growth can leave from in
+// its own direction. Cards hang off their header by a thin tether line (which also keeps them near it); headers are
+// joined by labelled edges.
 
 import { cardLook, cardSize, cardTextSkeletons, groupFor } from './card';
 import { clip, clusterLabel, FRAG_H, FRAG_W, HEADER_H, wrap, edgeLabel } from './boxes';
@@ -68,8 +70,10 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
 
     const sizes = cluster.slots.map(f => (f ? cardSize(f) : { width: FRAG_W, height: FRAG_H }));
     cardAt.push(...visible.map(fi => ({ pid: cluster.slots[fi]?.kbPassageIds?.[0], id: `frag-${ci}-${fi}` })));
+    // The card that matters most leads straight out; the rest branch off either side of it (see fanSlots)
     const spotsVisible = fanCenters(visible.length, h, h.angle, Math.max(...visible.map(i => sizes[i].height), FRAG_H));
-    const spots = cluster.slots.map((_, fi) => spotsVisible[Math.max(visible.indexOf(fi), 0)]);
+    const rank = [...visible].sort((a, b) => (cluster.slots[b]?.weight ?? 2) - (cluster.slots[a]?.weight ?? 2) || a - b);
+    const spots = cluster.slots.map((_, fi) => spotsVisible[Math.max(rank.indexOf(fi), 0)]);
     cluster.slots.forEach((frag, fi) => {
       if (frag?.dropped) return; // set aside by the narrator
       const base = { type: 'rectangle', roughness: 0, id: `frag-${ci}-${fi}`, x: spots[fi].x - sizes[fi].width / 2, y: spots[fi].y - sizes[fi].height / 2, width: sizes[fi].width, height: sizes[fi].height, roundness: null };

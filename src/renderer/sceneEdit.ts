@@ -2,6 +2,7 @@
 // logic is testable without Excalidraw's canvas-based measurement.
 
 import { flowify } from './flow';
+import { lockOrigin } from './origin';
 import type { WebModel } from '../types/web';
 import { cssVar } from './theme';
 import { clusterLabel, fragmentLook, type BoxData, type LabelSpec } from './boxes';
@@ -149,7 +150,7 @@ export function hydrateScene(scene: El[], model: WebModel): El[] {
     data.set(`cluster-${ci}`, { kind: 'cluster', index: ci, title: c.title });
     c.slots.forEach((f, fi) => { if (f) data.set(`frag-${ci}-${fi}`, { kind: 'fragment', cluster: ci, slot: fi, fragment: f }); });
   });
-  return flowify(relight(scene.map(e => (data.has(e.id) && !e.customData?.kind ? { ...e, customData: data.get(e.id) } : e))));
+  return lockOrigin(flowify(relight(scene.map(e => (data.has(e.id) && !e.customData?.kind ? { ...e, customData: data.get(e.id) } : e)))));
 }
 
 export { fragmentLook, clusterLabel };
