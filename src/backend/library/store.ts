@@ -116,5 +116,12 @@ export class LibraryDb {
     return out.map(r => ({ id: r.id, title: r.title, heading: r.heading, seq: r.seq, text: zlib.inflateRawSync(r.z).toString('utf8') }));
   }
 
+  /** How many passages contain `word` (stemmed like the index). Rare words say what a question is really about. */
+  docFreq(word: string): number {
+    const w = word.replace(/"/g, '');
+    if (!w) return 0;
+    try { return (this.db.prepare('SELECT count(*) AS n FROM fts WHERE fts MATCH ?').get(`"${w}"`) as { n: number }).n; } catch { return 0; }
+  }
+
   close() { try { this.db.close(); } catch { /* already closed */ } }
 }

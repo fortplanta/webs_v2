@@ -63,16 +63,23 @@ export const libraryRetriever: LibraryRetriever = {
         id: passageKey(meta.name, h.title, h.seq, h.id), source: `${meta.name}:${h.title}`, module: meta.name, heading: h.heading, text: h.text,
       })));
       if (!entries.length) return null;
-      // A passage must really be about the question: it should contain most of the query's words, not just one common one.
+      // A passage must really be about the question, not just share a common word with it ("sunk" and "cost" turn up
+      // in an article on barbed wire; "fallacy" is what the question is about). Words are weighted by how rare they are in
+      // the library, and a passage must carry the question's rarest word and most of its weight.
       const want = [...new Set(terms(query))];
-      const need = want.length <= 2 ? want.length : Math.ceil(want.length * 0.6);
+      const total = open.reduce((n, o) => n + o.meta.passages, 0);
+      const idf = new Map(want.map(t => [t, Math.log((total + 1) / (open.reduce((n, o) => n + o.db.docFreq(t), 0) + 1))]));
+      const sum = [...idf.values()].reduce((a, b) => a + b, 0);
+      const rarest = want.reduce((best, t) => ((idf.get(t) ?? 0) > (idf.get(best) ?? 0) ? t : best), want[0]);
       const about = entries.filter(e => {
         const has = new Set(terms(`${e.source.split(':')[1] ?? ''} ${e.heading} ${e.text}`));
-        return want.filter(t => has.has(t)).length >= need;
+        if (want.length > 1 && !has.has(rarest)) return false;
+        const covered = want.filter(t => has.has(t)).reduce((n, t) => n + (idf.get(t) ?? 0), 0);
+        return sum <= 0 || covered / sum >= 0.7;
       });
       if (!about.length) return null;
       entries.splice(0, entries.length, ...about);
-      const cfg: RetrieveConfig = { ...defaultRetrieveConfig, clusterCount: generation.clusterCount, fragmentsPerCluster: generation.fragmentsPerCluster };
+      const cfg: RetrieveConfig = { ...defaultRetrieveConfig, clusterCount: generation.clusterCount, fragmentsPerCluster: generation.fragmentsPerCluster, minCoverage: 0 };
       const retrieval = retrieve(PassageIndex.fromEntries(entries), query, cfg);
       return { retrieval, libraries: new Map(open.map(o => [o.meta.name, o.meta])) };
     } finally {

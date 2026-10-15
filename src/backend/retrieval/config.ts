@@ -8,6 +8,11 @@ export interface RetrieveConfig {
   fragmentsPerCluster: number;
   /** A passage must score at least this fraction of the best direct match to count as relevant at all. */
   relevanceFloor: number;
+  /**
+   * A passage must carry at least this share of the question's words, each weighted by how rare it is (a word the
+   * sources never use counts most), or it only shares a common word with it. 0 turns this off (card-based retrieval).
+   */
+  minCoverage: number;
   /** Cue words a passage needs to match for a lens connection to count as fully established. */
   cueHitsForFull: number;
   /** Flat connection strength credited to plain direct matches. */
@@ -31,6 +36,7 @@ export const defaultRetrieveConfig: RetrieveConfig = {
   clusterCount: 4,
   fragmentsPerCluster: 3,
   relevanceFloor: 0.2,
+  minCoverage: 0.6,
   cueHitsForFull: 2,
   directConn: 0.4,
   bridgeTerms: 6,

@@ -22,7 +22,7 @@ export const kbRetriever: Retriever = {
     const s = getSettings();
     const index = await loadIndex(s.kb.dir, s.kb.disabledModules);
     // Several routes are considered so the caller can pick a different angle; only one becomes a collection.
-    const cfg: RetrieveConfig = { ...defaultRetrieveConfig, clusterCount: 4, fragmentsPerCluster: s.generation.fragmentsPerCluster };
+    const cfg: RetrieveConfig = { ...defaultRetrieveConfig, clusterCount: 4, fragmentsPerCluster: s.generation.fragmentsPerCluster, minCoverage: 0 };
     const q = seedTerms(index, card.title, card.body);
     return retrieveTerms(index, q.join(' '), q, cfg, opts);
   },

@@ -80,7 +80,13 @@ export function retrieveTerms(index: PassageIndex, query: string, q: string[], c
   const scored = eligible.map(p => ({ p, s: index.bm25(p, qWeights) }));
   const maxS = Math.max(...scored.map(x => x.s));
   if (!(maxS > 0)) return empty;
-  const direct = scored.filter(x => x.s > 0 && x.s >= cfg.relevanceFloor * maxS).map(x => ({ p: x.p, rel: x.s / maxS }));
+  // "sunk cost fallacy" must not match an article on barbed wire because it mentions costs: weigh each query word by its
+  // rarity (a word nobody uses counts most) and require the passage to carry most of that weight
+  const weight = new Map(q.map(t => [t, index.idf(t)]));
+  const totalWeight = [...weight.values()].reduce((a, b) => a + b, 0);
+  const covers = (p: { termSet: ReadonlySet<string> }) => cfg.minCoverage <= 0 || q.length < 2 || totalWeight <= 0 || q.reduce((n, t) => n + (p.termSet.has(t) ? weight.get(t)! : 0), 0) / totalWeight >= cfg.minCoverage;
+  const direct = scored.filter(x => x.s > 0 && x.s >= cfg.relevanceFloor * maxS && covers(x.p)).map(x => ({ p: x.p, rel: x.s / maxS }));
+  if (direct.length === 0) return empty;
   const directIds = new Set(direct.map(d => d.p.id));
 
   // 2. routes

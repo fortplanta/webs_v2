@@ -86,7 +86,7 @@ describe('runPivot', () => {
     retrieve: async () => { throw new Error('unused'); },
     retrieveFromCard: async (c, opts) => {
       const q = seedTerms(index, c.title, c.body);
-      return retrieveTerms(index, q.join(' '), q, cfg, opts);
+      return retrieveTerms(index, q.join(' '), q, { ...cfg, minCoverage: 0 }, opts);
     },
   };
   const collect = async (llm: LlmService, req = { card, usedPassageIds: ['history/uses.md#1'] }, signal = new AbortController().signal) => {
