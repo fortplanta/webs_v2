@@ -60,6 +60,8 @@ a { color: var(--color-text); }
 @keyframes pulse { 50% { opacity: 0.2; } }
 .canvas { flex: 1; min-height: 0; position: relative; }
 .canvas-inner { position: absolute; inset: 0; }
+/* which way a line runs (flow.ts): a faint pulse painted over the canvas, behind nothing it shouldn't cover */
+.flow { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
 /* zoomed-out cards (lod.ts): an overlay that ignores the pointer, so the cards underneath stay live */
 .lod { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
 .lod-card { position: absolute; box-sizing: border-box; display: flex; align-items: center; overflow: hidden; background: var(--color-card-bg); border-radius: 2px; box-shadow: 0 0 0 1px var(--color-card-border); }

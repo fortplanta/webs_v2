@@ -10,6 +10,7 @@ import { BottomToolbar } from './BottomToolbar';
 import type { Command } from './commands';
 import { TimelineView } from './TimelineView';
 import { LodOverlay } from './LodOverlay';
+import { FlowOverlay } from './FlowOverlay';
 import type { TimelineCard } from './timeline';
 import { addCard, cardSize, updateCard } from './card';
 import { fragmentFromCapture, fragmentFromPaste, looksLikeExcalidrawClipboard } from './capture';
@@ -638,6 +639,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
             appState: { viewBackgroundColor: '#000000' },
           }}
         />
+        <FlowOverlay api={api} hidden={view === 'timeline'} />
         <LodOverlay api={api} hidden={view === 'timeline'} />
       </div>
 

@@ -39,7 +39,7 @@ describe('links on the canvas', () => {
   it('adds a labelled arrow that carries the verdict, and is found afterwards', () => {
     const { elements, id } = addLink([rect('a', 0), rect('b', 600)], { from: 'a', to: 'b', verdict, by: 'user', explanation: 'same idea' }, build, raw => ({ version: 1, ...raw }));
     const arrow = elements.find(e => e.id === id)!;
-    expect(arrow).toMatchObject({ endArrowhead: 'arrow', strokeWidth: 2, strokeStyle: 'solid', customData: { kind: 'link', by: 'user', tier: 'lateral', link: 'solid', note: 'n', explanation: 'same idea' } });
+    expect(arrow).toMatchObject({ endArrowhead: null, strokeWidth: 2, strokeStyle: 'solid', customData: { kind: 'link', directed: true, by: 'user', tier: 'lateral', link: 'solid', note: 'n', explanation: 'same idea' } });
     expect(elements.find(e => e.containerId === id)).toMatchObject({ text: 'echoes' });
     expect(hasLink(elements, 'b', 'a')).toBe(true);
     expect(hasLink(elements, 'a', 'zzz')).toBe(false);

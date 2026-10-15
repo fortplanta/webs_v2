@@ -106,7 +106,7 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
       seen.add(`${from}>${to}`);
       arrows.push({
         type: 'arrow', roughness: 0, id: `rel-${ci}-${fi}-${k}`, x: 0, y: 0, start: { id: from }, end: { id: to },
-        strokeColor: cssVar('--color-relation-stroke', '#9A9A9A'), strokeWidth: 1, endArrowhead: 'arrow', opacity: 80, label: edgeLabel(r.verb),
+        strokeColor: cssVar('--color-relation-stroke', '#9A9A9A'), strokeWidth: 1, endArrowhead: null, opacity: 80, label: edgeLabel(r.verb), customData: { directed: true },
       });
     });
   }));
@@ -117,13 +117,13 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
     arrows.push({
       type: 'arrow', roughness: 0, id: `edge-${i}`, x: 0, y: 0,
       start: { id: `cluster-${edge.source}` }, end: { id: `cluster-${edge.target}` },
-      strokeColor: EDGE(),
+      strokeColor: EDGE(), endArrowhead: null, customData: { directed: true },
       ...(edge.label ? { label: edgeLabel(edge.label) } : {}),
     });
   });
   const first = m.clusters.findIndex((_, i) => !hidden.has(i));
   if (first >= 0) {
-    arrows.push({ type: 'arrow', roughness: 0, id: 'seed-link', x: 0, y: 0, start: { id: 'seed' }, end: { id: `cluster-${first}` }, strokeColor: EDGE(), strokeWidth: 1, opacity: 70 });
+    arrows.push({ type: 'arrow', roughness: 0, id: 'seed-link', x: 0, y: 0, start: { id: 'seed' }, end: { id: `cluster-${first}` }, strokeColor: EDGE(), strokeWidth: 1, opacity: 70, endArrowhead: null, customData: { directed: true } });
   }
 
   return [...out, ...arrows];

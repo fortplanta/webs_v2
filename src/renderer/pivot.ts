@@ -119,8 +119,8 @@ export function addThread(
   const arrow = makeArrow({
     type: 'arrow', id: spec.id, x: p1.x, y: p1.y, width: Math.abs(dx), height: Math.abs(dy), points: [[0, 0], [dx, dy]],
     startBinding: { elementId: from.id, focus: 0, gap: 4 }, endBinding: { elementId: to.id, focus: 0, gap: 4 },
-    startArrowhead: null, endArrowhead: 'arrow', strokeColor: cssVar('--color-edge-stroke', '#6B6B6B'), strokeWidth: 1, opacity: 70, roundness: null, roughness: 0,
-    ...spec.look, ...(spec.customData ? { customData: spec.customData } : {}),
+    startArrowhead: null, endArrowhead: null, strokeColor: cssVar('--color-edge-stroke', '#6B6B6B'), strokeWidth: 1, opacity: 70, roundness: null, roughness: 0,
+    ...spec.look, customData: { ...spec.customData, directed: true },
   });
   const bump = (e: El): El => ({ ...e, boundElements: [...(e.boundElements ?? []), { type: 'arrow', id: spec.id }], version: (e.version ?? 0) + 1, versionNonce: Math.floor(Math.random() * 2 ** 31), updated: Date.now() });
   let out = elements.map(e => (e.id === from.id || e.id === to.id ? bump(e) : e));

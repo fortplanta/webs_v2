@@ -211,7 +211,7 @@ describe('pivot scene logic', () => {
     expect(out[0].id).toBe('thread');
     expect(out[1]).toMatchObject({ type: 'text', containerId: 'thread', text: 'led to' });
     const arrow = out[0];
-    expect(arrow).toMatchObject({ startBinding: { elementId: 'card' }, endBinding: { elementId: 'target' }, endArrowhead: 'arrow' });
+    expect(arrow).toMatchObject({ startBinding: { elementId: 'card' }, endBinding: { elementId: 'target' }, endArrowhead: null, customData: { directed: true } });
     expect(arrow.x).toBe(280); // leaves the right edge of the source card
     expect(arrow.x + arrow.points[1][0]).toBe(800); // lands on the left edge of the target
     for (const id of ['card', 'target']) expect(out.find(e => e.id === id)!.boundElements).toEqual(expect.arrayContaining([{ type: 'arrow', id: 'thread' }]));
