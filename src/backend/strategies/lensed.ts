@@ -64,28 +64,27 @@ export const lensed: Strategy = async function* (ctx) {
   const q = ctx.query.trim();
   if (!q) throw new WebsError('bad-json', 'Enter a topic first.');
 
-  // 1. retrieval — local, deterministic, effectively instant
-  const retrieval = await ctx.retriever.retrieve(q);
+  // 1. retrieval — local, deterministic, effectively instant. Your notes first; if they have nothing, the offline
+  // reference libraries (Wikipedia, …); only if neither has anything does the AI write the whole web.
+  const notes = await ctx.retriever.retrieve(q);
+  const lib = notes.collections.length === 0 && ctx.library ? await ctx.library.retrieve(q) : null;
+  const fromLibrary = !!lib && lib.retrieval.collections.length > 0;
+  const retrieval = fromLibrary ? lib!.retrieval : notes;
+  const marks = fromLibrary ? libraryMarks(lib!) : undefined;
   const collections = retrieval.collections;
   const wanted = ctx.config.clusterCount;
 
-  // Nothing in your notes: look in the offline reference libraries (Wikipedia, …), then ask your AI provider.
   if (collections.length === 0) {
-    const lib = ctx.library ? await ctx.library.retrieve(q) : null;
-    if (lib && lib.retrieval.collections.length > 0) {
-      yield { type: 'status', message: `Nothing in your notes — using ${[...lib.libraries.values()].map(l => l.label).join(', ')}…` };
-      yield* kbWeb(ctx, q, lib.retrieval, libraryMarks(lib));
-      return;
-    }
     if (!ctx.ai) {
       throw new WebsError('kb-empty', 'No results for that query in your notes or your libraries. Add notes to the kb/ folder, try different keywords, or set up an AI provider in Settings to answer from its own knowledge.');
     }
     yield* aiWeb({ query: q, signal: ctx.signal, ai: ctx.ai, start: 0, count: wanted, perCollection: ctx.config.fragmentsPerCluster });
     return;
   }
+  if (fromLibrary) yield { type: 'status', message: `Nothing in your notes — using ${[...lib!.libraries.values()].map(l => l.label).join(', ')}…` };
 
-  // The KB found some, but fewer collections than asked for: optionally fill the gap with the AI, running
-  // alongside the KB web so neither waits for the other.
+  // Whatever the local tier found, if it is fewer collections than asked for the AI can fill the gap (when that is on),
+  // running alongside the local web so neither waits for the other.
   const missing = wanted - collections.length;
   if (ctx.ai?.topUp && missing > 0) {
     const ai = ctx.ai;
@@ -97,11 +96,11 @@ export const lensed: Strategy = async function* (ctx) {
         else throw err;
       }
     })();
-    yield* interleave(kbWeb(ctx, q, retrieval), topUp);
+    yield* interleave(kbWeb(ctx, q, retrieval, marks), topUp);
     return;
   }
 
-  yield* kbWeb(ctx, q, retrieval);
+  yield* kbWeb(ctx, q, retrieval, marks);
 };
 
 /** What marks a card as coming from a reference library rather than the user's notes. */

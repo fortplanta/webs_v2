@@ -28,7 +28,8 @@ const outline = JSON.stringify({ context: 'About zeppelins.', clusters: [{ title
 const card = (cluster: number, title: string) => JSON.stringify({ cluster, type: 'concept', title, body: `${title} body.`, bridge: 'b', link: 'http://evil.example', kbSources: ['x.md'] }) + '\n';
 const fakeAi = (over: Partial<LlmService> = {}): LlmService => ({
   call: async () => outline,
-  async *stream() { yield card(0, 'rigid frame'); yield card(1, 'hindenburg') + card(0, 'gas cells'); },
+  // the first request writes three of the four cards (a small model stopping short); a request for one collection fills the gap
+  async *stream(o) { if (/^Collection:/m.test(o.user)) { yield card(1, 'crash'); return; } yield card(0, 'rigid frame'); yield card(1, 'hindenburg') + card(0, 'gas cells'); },
   ...over,
 });
 const run = (retriever: Retriever, ai: any, config = { clusterCount: 2, fragmentsPerCluster: 2 }) =>
@@ -135,12 +136,12 @@ describe('AI web', () => {
 
   it('answers from the AI when the KB has nothing, marking every card and collection as AI', async () => {
     const evs = await run(none, { llm: fakeAi(), model: 'test-model', topUp: false });
-    expect(evs.map(e => e.type)).toEqual(['status', 'ai-outline', 'status', 'fragment', 'fragment', 'fragment', 'done']);
+    expect(evs.map(e => e.type)).toEqual(['status', 'ai-outline', 'status', 'fragment', 'fragment', 'fragment', 'status', 'fragment', 'done']);
     const o = evs.find(e => e.type === 'ai-outline') as any;
     expect(o).toMatchObject({ start: 0, model: 'test-model', clusters: [{ title: 'Airships', slots: 2 }, { title: 'Disasters', slots: 2 }] });
     expect(o.edges).toEqual([{ source: 0, target: 1, label: 'ended with' }]);
     const frags = evs.filter(e => e.type === 'fragment') as any[];
-    expect(frags.map(f => [f.cluster, f.slot])).toEqual([[0, 0], [1, 0], [0, 1]]);
+    expect(frags.map(f => [f.cluster, f.slot])).toEqual([[0, 0], [1, 0], [0, 1], [1, 1]]);
     for (const f of frags) {
       expect(f.fragment).toMatchObject({ origin: 'ai', aiModel: 'test-model' });
       expect(f.fragment.link).toBeUndefined();        // the model can't attach links…

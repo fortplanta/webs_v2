@@ -257,3 +257,22 @@ Rules:
 - "tags": 2-4 lowercase words.
 - Output JSON Lines only. Each object on its own line.`;
 }
+
+/** Cards for one collection only: asked for when a model stopped short of what a whole-web request wanted. */
+export function buildAiCollectionMessage(query: string, context: string, titles: string[], index: number, count: number, have: string[]): string {
+  return `Topic: "${query}"
+Overview: ${context}
+
+Collection: "${titles[index]}" (one of: ${titles.join('; ')})
+${have.length ? `Cards already written for it (do not repeat them): ${have.join('; ')}\n` : ''}
+Write exactly ${count} card${count === 1 ? '' : 's'} for this collection, one JSON object per line:
+
+{"cluster": ${index}, "type": "person | concept | thesis | source | event | era | domain | quote", "title": "card title (2-5 words, lowercase)", "body": "a full paragraph of 4-6 sentences", "bridge": "one sentence on how this connects to the topic", "tags": ["tag1", "tag2"]}
+
+Rules:
+- Be accurate and specific. If you are not sure of a fact, leave it out rather than guess.
+- Do NOT include quotations, URLs, citations or statistics you cannot be certain of.
+- Choose "type" by what the card actually is: person, concept, thesis (a contested claim), source (a specific work), event, era, or domain.
+- "tags": 2-4 lowercase words.
+- Output JSON Lines only. Each object on its own line.`;
+}

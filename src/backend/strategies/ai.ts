@@ -7,7 +7,7 @@
 import { WebsError } from '../errors';
 import type { GeneratedFragment, OverviewEdge, WebEvent } from '../events';
 import type { LlmService } from '../llm';
-import { AI_CARDS_SYSTEM_PROMPT, AI_OUTLINE_SYSTEM_PROMPT, buildAiCardsMessage, buildAiOutlineMessage } from '../prompts';
+import { AI_CARDS_SYSTEM_PROMPT, AI_OUTLINE_SYSTEM_PROMPT, buildAiCardsMessage, buildAiCollectionMessage, buildAiOutlineMessage } from '../prompts';
 import { normalizeFragment, parseJsonObject, streamObjects } from '../parse';
 import { callJson } from '../repair';
 
@@ -65,6 +65,8 @@ export async function* aiWeb(opts: { query: string; signal: AbortSignal; ai: AiC
 
   yield { type: 'status', message: `${ai.model} is writing cards…` };
   const used = o.titles.map(() => 0);
+  const written_ = new Set<string>(); // titles already on the web, so the same card is never written twice
+  const titleOf = (f: { title: string }) => f.title.toLowerCase().trim();
   let written = 0;
   {
     for await (const obj of streamObjects(ai.llm.stream({ system: AI_CARDS_SYSTEM_PROMPT, user: buildAiCardsMessage(query, o.context, o.titles, perCollection), maxTokens: 4500 }, signal), ai.llm, signal)) {
@@ -73,8 +75,28 @@ export async function* aiWeb(opts: { query: string; signal: AbortSignal; ai: AiC
       let c = Number((obj as any).cluster);
       if (!Number.isInteger(c) || c < 0 || c >= o.titles.length || used[c] >= perCollection) c = used.findIndex(n => n < perCollection);
       if (c < 0) continue; // every slot filled
+      if (written_.has(titleOf(fragment))) continue;
+      written_.add(titleOf(fragment));
       yield { type: 'fragment', cluster: start + c, slot: used[c]++, fragment };
       written++;
+    }
+  }
+  // Smaller local models often stop after a few cards however many were asked for: ask for what is missing, one collection at a time.
+  for (let c = 0; c < o.titles.length; c++) {
+    if (used[c] >= perCollection || signal.aborted) continue;
+    yield { type: 'status', message: `${ai.model} is writing more for “${o.titles[c]}”…` };
+    try {
+      for await (const obj of streamObjects(ai.llm.stream({ system: AI_CARDS_SYSTEM_PROMPT, user: buildAiCollectionMessage(query, o.context, o.titles, c, perCollection - used[c], [...written_]), maxTokens: 2500 }, signal), ai.llm, signal)) {
+        const fragment = fromAi(obj, ai.model);
+        if (!fragment || used[c] >= perCollection) continue;
+        if (written_.has(titleOf(fragment))) continue;
+        written_.add(titleOf(fragment));
+        yield { type: 'fragment', cluster: start + c, slot: used[c]++, fragment };
+        written++;
+      }
+    } catch (err) {
+      if (err instanceof WebsError && err.code === 'cancelled') throw err;
+      if (written === 0) throw err; // nothing at all to show: let the caller say why
     }
   }
   if (written === 0) throw new WebsError('bad-json', 'The AI returned no usable cards.');

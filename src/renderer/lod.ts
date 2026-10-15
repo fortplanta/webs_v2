@@ -1,18 +1,17 @@
-// Level of detail: zoomed out, a card's body text is a smudge, so a layer over the canvas replaces what can't be read
-// with what can — the title in a readable size on a kind-coloured block, then, further out, just a dot. Nothing in the
-// scene changes (the layer ignores the pointer, and the cards underneath stay live). Pure, so it can be tested.
+// Level of detail: zoomed far out, a card's body text is a smudge, so a layer over the canvas replaces it with what can
+// be read: the title on a kind-coloured block, shrinking with the card. One look, no modes. Nothing in the scene changes
+// (the layer ignores the pointer, and the cards underneath stay live). Pure, so it can be tested.
 
 import type { GeneratedFragment } from '../backend/events';
 import type { El } from './sceneEdit';
 
-/** Below FULL_ABOVE the body is covered; below DOT_BELOW the cards shrink to dots. The cover fades in over FADE. */
-export const FULL_ABOVE = 0.55;
-export const DOT_BELOW = 0.2;
-const FADE = 0.1;
+/** Below FULL_ABOVE the body is covered, fading in over FADE: cards stay fully readable until they are properly small. */
+export const FULL_ABOVE = 0.32;
+const FADE = 0.06;
 
-export type Tier = 'full' | 'titles' | 'dots';
+export type Tier = 'full' | 'titles';
 
-export const tierFor = (zoom: number): Tier => (zoom >= FULL_ABOVE - FADE ? (zoom >= FULL_ABOVE ? 'full' : 'titles') : zoom < DOT_BELOW ? 'dots' : 'titles');
+export const tierFor = (zoom: number): Tier => (zoom >= FULL_ABOVE ? 'full' : 'titles');
 
 /** 0 at full detail, 1 once the cover is fully in: lets the cover fade rather than pop. */
 export const coverAmount = (zoom: number) => Math.min(1, Math.max(0, (FULL_ABOVE - zoom) / FADE));
@@ -26,11 +25,12 @@ export interface LodItem {
   type: GeneratedFragment['type'];
   title: string;
   weight: 1 | 2 | 3;
-  /** Title size in screen pixels: constant-ish whatever the zoom, bigger for what matters more. */
+  /** Title size in screen pixels: it follows the zoom a little (so it stays in proportion to the card), bigger for what matters more. 0 when there is no room to read anything. */
   fontPx: number;
 }
 
-const FONT = { 1: 12, 2: 14, 3: 17 } as const;
+const FONT = { 1: 10, 2: 11, 3: 12 } as const;
+const MIN_FONT = 7, MIN_WIDTH = 44;
 
 /** The cards on screen that need a cover at this zoom, minus `skip` (the selected ones, which keep their outline). Empty at full detail. */
 export function lodItems(elements: readonly El[], view: View, skip: ReadonlySet<string> = new Set()): LodItem[] {
@@ -43,7 +43,8 @@ export function lodItems(elements: readonly El[], view: View, skip: ReadonlySet<
     const x = (e.x + view.scrollX) * view.zoom, y = (e.y + view.scrollY) * view.zoom, w = e.width * view.zoom, h = e.height * view.zoom;
     if (x + w < 0 || y + h < 0 || x > view.width || y > view.height) continue; // off screen
     const weight = f.weight ?? 2;
-    out.push({ id: e.id, x, y, w, h, type: f.type, title: f.title, weight, fontPx: FONT[weight] });
+    const fontPx = Math.round(FONT[weight] * Math.min(1, Math.max(0.5, view.zoom / FULL_ABOVE)));
+    out.push({ id: e.id, x, y, w, h, type: f.type, title: f.title, weight, fontPx: w >= MIN_WIDTH && fontPx >= MIN_FONT ? fontPx : 0 });
   }
   return out;
 }

@@ -64,12 +64,9 @@ a { color: var(--color-text); }
 .lod { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
 .lod-card { position: absolute; box-sizing: border-box; display: flex; align-items: center; overflow: hidden; background: var(--color-card-bg); border-radius: 2px; box-shadow: 0 0 0 1px var(--color-card-border); }
 .lod-bar { align-self: stretch; flex: none; width: 4px; }
-.lod-title { padding: 4px 8px; line-height: 1.2; font-weight: 500; color: var(--color-card-title); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
+.lod-title { padding: 3px 6px; line-height: 1.2; font-weight: 500; color: var(--color-card-title); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; }
 .lod-title.w1 { color: var(--color-card-title-lo); font-weight: 400; }
 .lod-title.w3 { color: var(--color-card-title-hi); }
-.lod-cover { position: absolute; background: var(--color-card-bg); }
-.lod-dot { position: absolute; border-radius: 50%; }
-.lod-cover i { position: absolute; left: 100%; top: 50%; margin-left: 8px; transform: translateY(-50%); font-style: normal; font-weight: 500; white-space: nowrap; color: var(--color-card-title-hi); text-shadow: 0 0 6px #000, 0 0 2px #000; }
 
 /* ── Settings ─────────────────────────────────────────────────────────────────────────────────────────────────── */
 .settings { overflow: auto; }

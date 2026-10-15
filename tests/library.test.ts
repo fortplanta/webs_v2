@@ -141,6 +141,18 @@ describe('library tier', () => {
     expect(m.clusters[0].slots[0]?.origin).toBe('wiki');
   });
 
+  it('tops a thin library web up with the AI when that is on (the library used to end the search)', async () => {
+    setSettingsOverrides({ library: { dir: libDir, disabled: [] } });
+    const outline = JSON.stringify({ context: 'About zeppelins.', clusters: [{ title: 'Risks', edge: 'led to' }, { title: 'Money', edge: 'paid for' }, { title: 'People', edge: 'affected' }] });
+    const aiCard = (cluster: number) => JSON.stringify({ cluster, type: 'concept', title: `ai card ${cluster}`, body: 'Body.', bridge: 'b' }) + '\n';
+    const ai = { llm: { call: async () => outline, async *stream() { yield aiCard(0) + aiCard(1) + aiCard(2); } } as LlmService, model: 'test-model', topUp: true };
+    const evs = await collect(runStrategy('zeppelin airship', { strategy: 'lensed', signal: new AbortController().signal, retriever: none, llm: offline, ai, config: { clusterCount: 4, fragmentsPerCluster: 1 } }));
+    const frags = evs.filter(e => e.type === 'fragment') as any[];
+    expect(frags.some(f => f.fragment.origin === 'wiki')).toBe(true);
+    expect(frags.filter(f => f.fragment.origin === 'ai').length).toBeGreaterThan(0);
+    expect(evs.some(e => e.type === 'ai-outline')).toBe(true);
+  });
+
   it('prefers the notes: the library is never searched when the notes have results', async () => {
     setSettingsOverrides({ library: { dir: libDir, disabled: [] } });
     const library = { retrieve: async () => { throw new Error('should not be searched'); } };

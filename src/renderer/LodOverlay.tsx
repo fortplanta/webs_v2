@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import { typeColors } from './boxes';
-import { coverAmount, lodItems, tierFor, type LodItem } from './lod';
+import { coverAmount, lodItems, type LodItem } from './lod';
 import type { El } from './sceneEdit';
 
 /** Draws the zoomed-out view of the cards (see lod.ts). Listens to the canvas itself so panning doesn't re-render the app. */
@@ -22,27 +22,15 @@ export function LodOverlay({ api, hidden }: { api: ExcalidrawImperativeAPI | nul
   }, [api]);
 
   if (hidden || !state.items.length) return null;
-  const tier = tierFor(state.zoom), opacity = coverAmount(state.zoom);
+  const opacity = coverAmount(state.zoom);
   return (
     <div className="lod" style={{ opacity }} aria-hidden>
-      {state.items.map(it => {
-        const c = typeColors(it.type).bg;
-        if (tier === 'dots') {
-          const d = it.weight === 3 ? 14 : it.weight === 2 ? 10 : 7;
-          return (
-            <span key={it.id} className="lod-cover" style={{ left: it.x, top: it.y, width: it.w, height: it.h }}>
-              <span className="lod-dot" style={{ left: it.w / 2 - d / 2, top: it.h / 2 - d / 2, width: d, height: d, background: c }} />
-              {it.weight === 3 && <i style={{ fontSize: it.fontPx }}>{it.title}</i>}
-            </span>
-          );
-        }
-        return (
-          <div key={it.id} className="lod-card" style={{ left: it.x, top: it.y, width: it.w, height: it.h }}>
-            <span className="lod-bar" style={{ background: c }} />
-            <span className={`lod-title w${it.weight}`} style={{ fontSize: it.fontPx }}>{it.title}</span>
-          </div>
-        );
-      })}
+      {state.items.map(it => (
+        <div key={it.id} className="lod-card" style={{ left: it.x, top: it.y, width: it.w, height: it.h }}>
+          <span className="lod-bar" style={{ background: typeColors(it.type).bg, width: Math.max(2, Math.min(4, it.w / 40)) }} />
+          {it.fontPx > 0 && <span className={`lod-title w${it.weight}`} style={{ fontSize: it.fontPx }}>{it.title}</span>}
+        </div>
+      ))}
     </div>
   );
 }
