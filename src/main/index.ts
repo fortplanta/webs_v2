@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { runStrategy, strategies } from '../backend/strategies';
 import { runPivot } from '../backend/pivot';
 import { runLens } from '../backend/lenses';
+import { judgeConnection } from '../backend/connections';
 import { listOllamaModels, warmUp } from '../backend/llm';
 import { listKbModules } from '../backend/kb';
 import { listInbox, markComposted, markFiled, testCapture } from '../backend/capture';
@@ -96,6 +97,7 @@ ipcMain.on('webs:pivot-start', async (e, id: number, req) => {
 });
 ipcMain.on('webs:pivot-cancel', (e, id: number) => running.get(`pivot:${key(e.sender.id, id)}`)?.abort());
 
+ipcMain.handle('webs:connect', (_e, req) => judgeConnection(req));
 ipcMain.handle('webs:lens', (_e, req) => runLens(req));
 ipcMain.handle('webs:list', () => store.list());
 ipcMain.handle('webs:load', (_e, id: string) => store.get(id));

@@ -13,12 +13,13 @@ import { LodOverlay } from './LodOverlay';
 import type { TimelineCard } from './timeline';
 import { addCard, cardSize, updateCard } from './card';
 import { fragmentFromCapture, fragmentFromPaste, looksLikeExcalidrawClipboard } from './capture';
-import { ClusterEditor, EdgeEditor, FragmentEditor, ImageCardEditor, InboxPanel, type StickProps } from './Editors';
+import { ClusterEditor, ConnectPanel, EdgeEditor, FragmentEditor, ImageCardEditor, InboxPanel, type StickProps } from './Editors';
 import { hitTest } from './hit';
 import { useLiveLayout } from './layout/useLiveLayout';
 import { addImageCard, imageCardLayout, type ImageCardData } from './imageCard';
 import { addPivotCluster, addThread, pivotFootprint, placePivot, threadLabelBox, usedPassageIds } from './pivot';
 import { addTether, removeTether, tetherOf } from './tether';
+import { addLink, hasLink, LINK_KIND } from './link';
 import { revealView } from './viewport';
 import { blobToDataURL, contentId, dataUrlToBlob, describeResize, ImageImportError, imageTypeOf, looksLikeImage, prepareImage } from './images';
 import { buildSkeletons } from './layout';
@@ -47,7 +48,7 @@ interface Props {
 type Editing =
   | { kind: 'fragment'; id: string; fragment: GeneratedFragment }
   | { kind: 'cluster'; id: string; title: string; lens?: string; origin?: 'ai' | 'wiki' }
-  | { kind: 'edge'; id: string; label: string }
+  | { kind: 'edge'; id: string; label: string; link?: { by: 'user' | 'model'; tier: string; link: string; note?: string; explanation?: string } }
   | { kind: 'image'; id: string; data: ImageCardData }
   | null;
 
@@ -75,6 +76,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
   const [pivot, setPivot] = useState<{ status: string } | null>(null);
   const [lensing, setLensing] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState<{ a: string; b: string; busy: boolean } | null>(null);
   // Picking what to stick a card to: set to that card's id until the user clicks a target (or cancels).
   const [sticking, setSticking] = useState<string | null>(null);
   const [, redraw] = useState(0);
@@ -183,7 +185,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     if (hit.kind === 'fragment') setEditing({ kind: 'fragment', id: hit.id, fragment: el.customData.fragment });
     else if (hit.kind === 'cluster') setEditing({ kind: 'cluster', id: hit.id, title: el.customData.title, lens: el.customData.lens, origin: el.customData.origin });
     else if (hit.kind === 'image') setEditing({ kind: 'image', id: hit.id, data: el.customData });
-    else setEditing({ kind: 'edge', id: hit.id, label: scene().find(e => e.type === 'text' && e.containerId === hit.id && !e.isDeleted)?.text ?? '' });
+    else setEditing({ kind: 'edge', id: hit.id, label: scene().find(e => e.type === 'text' && e.containerId === hit.id && !e.isDeleted)?.text ?? '', ...(el.customData?.kind === LINK_KIND ? { link: el.customData } : {}) });
   }
 
   // Dropping image files onto the canvas. Other file types are left to the browser/Excalidraw.
@@ -230,7 +232,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     const el = byId(id);
     if (!el) return;
     apply(updateBox(scene(), id, label.trim() ? { label: edgeLabel(label), geometry: arrowCenterBox(el) } : { label: null }, build));
-    setEditing({ kind: 'edge', id, label });
+    setEditing(prev => ({ kind: 'edge', id, label, ...(prev?.kind === 'edge' && prev.link ? { link: prev.link } : {}) }));
   }
 
   function editImage(id: string, caption: string) {
@@ -525,6 +527,33 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     api.scrollToContent(el as any, { animate: true, fitToViewport: false });
   }
 
+  /** The two cards the user has selected, if exactly two: the ends of a link they might draw. */
+  const selectedPair = (): [El, El] | null => {
+    if (!api) return null;
+    const ids = Object.keys(api.getAppState().selectedElementIds);
+    const cards = ids.map(id => byId(id)).filter((e): e is El => !!e && e.type === 'rectangle' && e.customData?.kind === 'fragment');
+    return cards.length === 2 ? [cards[0], cards[1]] : null;
+  };
+
+  /** Draw the arrow the user asked for, then ask the model what it makes of the link. Their arrow stays whatever it says. */
+  async function connect(explanation: string) {
+    if (!connecting) return;
+    const a = byId(connecting.a), b = byId(connecting.b);
+    if (!a || !b) { setConnecting(null); say('error', 'One of the cards is gone.'); return; }
+    setConnecting({ ...connecting, busy: true });
+    const said = explanation.trim();
+    try {
+      const res = await window.webs.connect({ a: a.customData.fragment, b: b.customData.fragment, ...(said ? { explanation: said } : {}) });
+      if (!res.ok) { say('error', res.message); return; }
+      const v = res.verdict;
+      if (!said && v.link === 'none') { say('info', v.note || 'The model sees no real link between these two.'); setConnecting(null); return; }
+      const { elements, id } = addLink(scene(), { from: a.id, to: b.id, verdict: v, by: said ? 'user' : 'model', ...(said ? { explanation: said } : {}) }, build, makeArrow);
+      apply(elements);
+      setConnecting(null);
+      setEditing({ kind: 'edge', id, label: v.verb, link: { by: said ? 'user' : 'model', tier: v.tier, link: v.link, note: v.note, ...(said ? { explanation: said } : {}) } });
+    } finally { setConnecting(c => (c ? { ...c, busy: false } : c)); }
+  }
+
   /** Look at a card another way: the result is a new card beside it, tethered to it; the original is untouched. */
   async function startLens(cardId: string, lens: LensId) {
     const el = byId(cardId), label = LENS_CHOICES.find(l => l.id === lens)?.label ?? lens;
@@ -578,6 +607,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
       { id: 'add-image', group: 'Actions', label: 'Add image', keywords: 'picture photo', run: () => fileInput.current?.click() },
       { id: 'zoom-fit', group: 'Actions', label: 'Zoom to fit', hint: '⇧1', keywords: 'view', run: () => zoom('fit') },
       ...(selected && !pivot ? [{ id: 'explore', group: 'Actions', label: 'Explore a different angle', detail: selected.customData.fragment?.title, run: () => startPivot(selected.id) }] : []),
+      ...(connecting ? [] : (pair => (pair && !hasLink(scene(), pair[0].id, pair[1].id) ? [{ id: 'connect', group: 'Actions', label: 'Connect these two cards…', detail: `${pair[0].customData.fragment.title} → ${pair[1].customData.fragment.title}`, keywords: 'link relate arrow', run: () => setConnecting({ a: pair[0].id, b: pair[1].id, busy: false }) }] : []))(selectedPair())),
       ...(selected && !lensing ? LENS_CHOICES.map(l => ({ id: `lens-${l.id}`, group: 'Look at this card', label: l.label, detail: l.kind === 'argument' ? '✦ AI · not from your notes' : l.description, keywords: `${l.description} ${selected.customData.fragment?.title ?? ''}`, run: () => startLens(selected.id, l.id) })) : []),
     ];
     for (const e of scene()) {
@@ -648,8 +678,11 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
       {editing?.kind === 'cluster' && (
         <ClusterEditor key={editing.id} title={editing.title} lens={editing.lens} origin={editing.origin} aiModel={model.aiModel} onChange={t => editCluster(editing.id, t)} onAddFragment={() => addToCluster(editing.id)} onClose={() => setEditing(null)} stick={stickProps(editing.id)} />
       )}
+      {connecting && byId(connecting.a) && byId(connecting.b) && (
+        <ConnectPanel a={byId(connecting.a)!.customData.fragment.title} b={byId(connecting.b)!.customData.fragment.title} busy={connecting.busy} onConnect={t => void connect(t)} onClose={() => setConnecting(null)} />
+      )}
       {editing?.kind === 'edge' && (
-        <EdgeEditor key={editing.id} label={editing.label} onChange={l => editEdge(editing.id, l)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} />
+        <EdgeEditor key={editing.id} label={editing.label} link={editing.link} onChange={l => editEdge(editing.id, l)} onDelete={() => remove(editing.id)} onClose={() => setEditing(null)} />
       )}
     </div>
   );

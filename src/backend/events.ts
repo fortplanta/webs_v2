@@ -117,3 +117,24 @@ export interface LensRequest { card: GeneratedFragment; lens: LensId }
 export type LensResult =
   | { ok: true; fragment: GeneratedFragment; label: string }
   | { ok: false; message: string };
+
+// ── Connections: a link between two cards, judged ────────────────────────────────────────────────
+
+export interface ConnectRequest {
+  a: GeneratedFragment;
+  b: GeneratedFragment;
+  /** The user's own account of how they connect. Empty: the model is asked whether it can see a link. */
+  explanation?: string;
+}
+
+/** How well a link holds: 'solid' holds up, 'stretch' is a reach, 'none' the model sees no real link. Tier: well-known ('obvious') or 'lateral'. */
+export interface ConnectionVerdict {
+  link: 'solid' | 'stretch' | 'none';
+  tier: 'obvious' | 'lateral';
+  /** A short verb phrase for the arrow ("led to", "is the opposite of"). */
+  verb: string;
+  /** One or two sentences on why it holds or doesn't. The model's opinion, shown as such. */
+  note: string;
+}
+
+export type ConnectResult = { ok: true; verdict: ConnectionVerdict } | { ok: false; message: string };

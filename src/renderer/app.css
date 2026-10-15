@@ -254,3 +254,6 @@ a { color: var(--color-text); }
 
 .original-text { margin: 6px 0; white-space: pre-wrap; color: var(--color-text-secondary); font-size: var(--font-size-tag); line-height: 1.45; }
 .editor details summary { cursor: pointer; margin-top: 4px; }
+
+.link-verdict { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 8px; }
+.link-verdict p { margin: 0; font-size: 12px; line-height: 1.45; color: var(--color-card-body); }

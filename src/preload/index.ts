@@ -34,6 +34,7 @@ const api: WebsApi = {
     };
   },
   warmUp() { ipcRenderer.send('webs:warmup'); },
+  connect: req => ipcRenderer.invoke('webs:connect', req),
   lens: req => ipcRenderer.invoke('webs:lens', req),
   listWebs: () => ipcRenderer.invoke('webs:list'),
   loadWeb: id => ipcRenderer.invoke('webs:load', id),

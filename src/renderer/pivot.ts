@@ -107,7 +107,7 @@ export function threadLabelBox(arrow: El): { x: number; y: number; width: number
  */
 export function addThread(
   elements: El[],
-  spec: { id: string; fromId: string; toId: string; label?: string },
+  spec: { id: string; fromId: string; toId: string; label?: string; look?: { strokeColor?: string; strokeStyle?: string; strokeWidth?: number; opacity?: number }; customData?: Record<string, unknown> },
   build: Build,
   makeArrow: (raw: El) => El,
 ): El[] {
@@ -120,6 +120,7 @@ export function addThread(
     type: 'arrow', id: spec.id, x: p1.x, y: p1.y, width: Math.abs(dx), height: Math.abs(dy), points: [[0, 0], [dx, dy]],
     startBinding: { elementId: from.id, focus: 0, gap: 4 }, endBinding: { elementId: to.id, focus: 0, gap: 4 },
     startArrowhead: null, endArrowhead: 'arrow', strokeColor: cssVar('--color-edge-stroke', '#6B6B6B'), strokeWidth: 1, opacity: 70, roundness: null, roughness: 0,
+    ...spec.look, ...(spec.customData ? { customData: spec.customData } : {}),
   });
   const bump = (e: El): El => ({ ...e, boundElements: [...(e.boundElements ?? []), { type: 'arrow', id: spec.id }], version: (e.version ?? 0) + 1, versionNonce: Math.floor(Math.random() * 2 ** 31), updated: Date.now() });
   let out = elements.map(e => (e.id === from.id || e.id === to.id ? bump(e) : e));

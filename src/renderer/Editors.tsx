@@ -158,8 +158,10 @@ export function ClusterEditor({ title, lens, origin, aiModel, onChange, onAddFra
   );
 }
 
-export function EdgeEditor({ label, onChange, onDelete, onClose }: {
+export function EdgeEditor({ label, link, onChange, onDelete, onClose }: {
   label: string;
+  /** Set for a link the user drew between two cards: what the model made of it. */
+  link?: { by: 'user' | 'model'; tier: string; link: string; note?: string; explanation?: string };
   onChange: (label: string) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -171,6 +173,13 @@ export function EdgeEditor({ label, onChange, onDelete, onClose }: {
       <label>Verb phrase <span className="meta">e.g. "shaped by", "led to"</span>
         <input ref={ref} value={label} onChange={e => onChange(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') onClose(); }} />
       </label>
+      {link && (
+        <div className="link-verdict">
+          <span className="meta">{link.tier === 'lateral' ? 'A lateral link' : 'A well-known link'} · {link.link === 'solid' ? 'holds up' : link.link === 'stretch' ? 'a stretch' : 'the model sees no real link'}</span>
+          {link.explanation && <p>You said: {link.explanation}</p>}
+          {link.note && <p>✦ {link.note}</p>}
+        </div>
+      )}
       <div className="editor-actions">
         <button className="danger" onClick={onDelete}>Delete connection</button>
         <button onClick={onClose}>Done</button>
@@ -265,6 +274,27 @@ export function ImageCardEditor({ data, onCaption, onDelete, onClose, stick }: {
       <div className="editor-actions">
         <button className="danger" onClick={onDelete}>Delete image</button>
         <button onClick={onClose}>Done</button>
+      </div>
+    </Panel>
+  );
+}
+
+
+/** Link two cards: say how they connect (or leave it empty and ask the model whether it sees a link). */
+export function ConnectPanel({ a, b, busy, onConnect, onClose }: { a: string; b: string; busy: boolean; onConnect: (explanation: string) => void; onClose: () => void }) {
+  const [text, setText] = useState('');
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { ref.current?.focus(); }, []);
+  return (
+    <Panel title="Connect two cards" onClose={onClose}>
+      <p className="meta"><strong>{a}</strong> → <strong>{b}</strong></p>
+      <label>How are they connected? <span className="meta">in your own words, or leave empty to ask the model</span>
+        <textarea ref={ref} rows={3} value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !busy) onConnect(text); }} />
+      </label>
+      <p className="meta">The model gives its opinion on the link. Your arrow stays either way.</p>
+      <div className="editor-actions">
+        <button onClick={onClose}>Cancel</button>
+        <button onClick={() => onConnect(text)} disabled={busy}>{busy ? 'Thinking…' : text.trim() ? 'Connect' : 'Find a link'}</button>
       </div>
     </Panel>
   );
