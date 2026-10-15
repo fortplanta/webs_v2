@@ -12,7 +12,8 @@
     "pack": "electron-vite build && electron-builder --dir",
     "dist": "electron-vite build && electron-builder",
     "release": "sh scripts/release.sh",
-    "library:import": "sh scripts/library.sh"
+    "library:import": "sh scripts/library.sh",
+    "check:ollama": "sh scripts/check-ollama.sh"
   },
   "devDependencies": {
     "@excalidraw/excalidraw": "^0.18.1",
