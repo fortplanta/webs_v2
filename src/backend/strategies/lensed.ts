@@ -107,9 +107,10 @@ export const lensed: Strategy = async function* (ctx) {
   // running alongside the local web so neither waits for the other.
   const missing = wanted - collections.length;
   const ai = ctx.ai?.topUp ? ctx.ai : null;
+  const seenTitles = new Set<string>(); // every card title on the web so far, so a later wave of AI cards never repeats one
   const topUp = (start: number, count: number, avoid: string[]) => (async function* (): AsyncGenerator<WebEvent> {
     try {
-      yield* aiWeb({ query: q, signal: ctx.signal, ai: ai!, start, count, perCollection: ctx.config.fragmentsPerCluster, avoid, reference: referenceOf(collections) });
+      yield* aiWeb({ query: q, signal: ctx.signal, ai: ai!, start, count, perCollection: ctx.config.fragmentsPerCluster, avoid, reference: referenceOf(collections), seenTitles: [...seenTitles] });
     } catch (err) {
       if (err instanceof WebsError && err.code !== 'cancelled') yield { type: 'warning', message: `Couldn't add AI collections: ${err.message}` };
       else throw err;
@@ -122,12 +123,13 @@ export const lensed: Strategy = async function* (ctx) {
   async function* watched(src: AsyncGenerator<WebEvent>): AsyncGenerator<WebEvent> {
     for await (const e of src) {
       if (e.type === 'fragment' && e.cluster < collections.length) kept.set(`${e.cluster}:${e.slot}`, !e.fragment.dropped);
+      if (e.type === 'fragment' && !e.fragment.draft) seenTitles.add(e.fragment.title);
       yield e;
     }
   }
   const local = watched(kbWeb(ctx, q, retrieval, marks));
   const first = ai && missing > 0 ? interleave(local, topUp(collections.length, missing, collections.map(c => c.label))) : local;
-  yield* first;
+  for await (const e of first) { if (e.type === 'fragment' && !e.fragment.draft) seenTitles.add(e.fragment.title); yield e; }
 
   if (ai) {
     const survivingLocal = new Set([...kept].filter(([, v]) => v).map(([k]) => k.split(':')[0])).size;
@@ -141,9 +143,9 @@ export const lensed: Strategy = async function* (ctx) {
 };
 
 /** What marks a card as coming from a reference library rather than the user's notes. */
-interface Marks { origin: 'wiki'; of(p: SelectedPassage): Partial<GeneratedFragment>; /** Where this passage's article lives, for fetching its picture. */ article(p: SelectedPassage): { urlBase: string; title: string } | null }
+export interface Marks { origin: 'wiki'; of(p: SelectedPassage): Partial<GeneratedFragment>; /** Where this passage's article lives, for fetching its picture. */ article(p: SelectedPassage): { urlBase: string; title: string } | null }
 
-function libraryMarks(lib: LibraryRetrieval): Marks {
+export function libraryMarks(lib: LibraryRetrieval): Marks {
   return {
     origin: 'wiki',
     of(p) {

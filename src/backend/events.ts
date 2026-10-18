@@ -87,6 +87,8 @@ export interface PivotRequest {
   card: GeneratedFragment;
   /** KB passage ids already on the canvas; a pivot never repeats them. */
   usedPassageIds: string[];
+  /** The web's question, so an AI-written angle stays about it. */
+  query?: string;
 }
 
 export type PivotEvent =

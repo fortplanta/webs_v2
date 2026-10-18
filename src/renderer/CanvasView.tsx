@@ -11,6 +11,11 @@ import type { Command } from './commands';
 import { TimelineView } from './TimelineView';
 import { LodOverlay } from './LodOverlay';
 import { FlowOverlay } from './FlowOverlay';
+import { PopMenu, type PopItem } from './PopMenu';
+import { SelectionBar, type BarActions } from './SelectionBar';
+import { branchSpot, connectionSeed } from './branch';
+import { cutTargets, DRAG_PX, modeFor, type GestureMode } from './gesture';
+import { IconBranch, IconCut, IconEdit, IconExplore, IconLink, IconLens, IconPlus } from './icons';
 import type { TimelineCard } from './timeline';
 import { addCard, cardSize, updateCard } from './card';
 import { fragmentFromCapture, fragmentFromPaste, looksLikeExcalidrawClipboard } from './capture';
@@ -78,6 +83,16 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   const [pivot, setPivot] = useState<{ status: string } | null>(null);
   const [lensing, setLensing] = useState<string | null>(null);
   const [connecting, setConnecting] = useState<{ a: string; b: string; busy: boolean } | null>(null);
+  // Picking the second card of a link after pressing Connect on the first.
+  const [connectFrom, setConnectFrom] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; title?: string; items: PopItem[] } | null>(null);
+  // The link/branch/cut gesture (see gesture.ts): a trail while it is drawn, and which key is held to start one.
+  const [trail, setTrail] = useState<{ mode: GestureMode; ax: number; ay: number; bx: number; by: number } | null>(null);
+  const [held, setHeld] = useState<'l' | 'k' | null>(null);
+  const heldRef = useRef<'l' | 'k' | null>(null);
+  const gesture = useRef<{ mode: GestureMode; startId: string | null; startKind: string | null; sx: number; sy: number; moved: boolean; rmb: boolean } | null>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const pivotAt = useRef<{ x: number; y: number } | undefined>(undefined);
   // Picking what to stick a card to: set to that card's id until the user clicks a target (or cancels).
   const [sticking, setSticking] = useState<string | null>(null);
   const [, redraw] = useState(0);
@@ -298,17 +313,173 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     say('info', `Stuck to “${nameOf(byId(anchorId)!)}”. Drag either one to see it follow.`);
   }
 
+  const sceneAt = (clientX: number, clientY: number) => viewportCoordsToSceneCoords({ clientX, clientY }, api!.getAppState());
+  const hitAt = (clientX: number, clientY: number) => {
+    const { x, y } = sceneAt(clientX, clientY);
+    return hitTest(api!.getSceneElements() as unknown as El[], x, y, api!.getAppState().zoom.value);
+  };
+
+  if (import.meta.env.DEV && api) (window as unknown as { __hit?: unknown }).__hit = (cx: number, cy: number) => hitAt(cx, cy); // dev only: lets test scripts probe hit-testing
+
   function onPointerDownCapture(e: React.PointerEvent) {
     navigated.current = true;
     if (!touched) setTouched(true);
-    if (!sticking || !api) return;
+    if (!api) return;
+    if (sticking) {
+      e.stopPropagation();
+      e.preventDefault();
+      const hit = hitAt(e.clientX, e.clientY);
+      finishSticking(hit && hit.kind !== 'edge' ? hit.id : null);
+      return;
+    }
+    if (connectFrom) {
+      e.stopPropagation();
+      e.preventDefault();
+      const hit = hitAt(e.clientX, e.clientY);
+      const from = connectFrom;
+      setConnectFrom(null);
+      if (hit?.kind === 'fragment' && hit.id !== from) setConnecting({ a: from, b: hit.id, busy: false });
+      else if (hit) say('info', 'Links join two cards.');
+      return;
+    }
+
+    // The link / branch / cut gesture: right-button drag, or the left button with L (link, branch) or K (knife) held.
+    const keyed = heldRef.current && e.button === 0;
+    if (!(e.button === 2 || keyed) || view === 'timeline') return;
+    const hit = hitAt(e.clientX, e.clientY);
+    const mode = modeFor(hit?.kind ?? null, keyed ? heldRef.current : null);
+    if (!mode) return;
     e.stopPropagation();
     e.preventDefault();
-    const app = api.getAppState();
-    const { x, y } = viewportCoordsToSceneCoords({ clientX: e.clientX, clientY: e.clientY }, app);
-    const hit = hitTest(api.getSceneElements() as unknown as El[], x, y, app.zoom.value);
-    finishSticking(hit && hit.kind !== 'edge' ? hit.id : null);
+    gesture.current = { mode, startId: hit && hit.kind !== 'edge' ? hit.id : null, startKind: hit?.kind ?? null, sx: e.clientX, sy: e.clientY, moved: false, rmb: e.button === 2 };
+    window.addEventListener('pointermove', onGestureMove);
+    window.addEventListener('pointerup', onGestureUp, { once: true });
   }
+
+  const local = (clientX: number, clientY: number) => { const r = innerRef.current?.getBoundingClientRect(); return { x: clientX - (r?.left ?? 0), y: clientY - (r?.top ?? 0) }; };
+
+  function onGestureMove(e: PointerEvent) {
+    const g = gesture.current;
+    if (!g) return;
+    if (!g.moved && Math.hypot(e.clientX - g.sx, e.clientY - g.sy) < DRAG_PX) return;
+    g.moved = true;
+    const a = local(g.sx, g.sy), b = local(e.clientX, e.clientY);
+    setTrail({ mode: g.mode, ax: a.x, ay: a.y, bx: b.x, by: b.y });
+  }
+
+  function onGestureUp(e: PointerEvent) {
+    window.removeEventListener('pointermove', onGestureMove);
+    const g = gesture.current;
+    gesture.current = null;
+    setTrail(null);
+    if (!g || !api) return;
+    if (!g.moved) { if (g.rmb) openContextMenu(e.clientX, e.clientY); return; }
+    if (g.mode === 'cut') {
+      const a = sceneAt(g.sx, g.sy), b = sceneAt(e.clientX, e.clientY);
+      const cuts = cutTargets(scene(), a, b);
+      if (cuts.length) cutConnections(cuts); else say('info', 'Nothing there to cut. Drag across a line.');
+      return;
+    }
+    const end = hitAt(e.clientX, e.clientY);
+    const start = g.startId ? byId(g.startId) : null;
+    if (!start) return;
+    if (end && end.kind !== 'edge') {
+      if (end.id === g.startId) return;
+      if (end.kind === 'fragment' && g.startKind === 'fragment') setConnecting({ a: g.startId!, b: end.id, busy: false });
+      else say('info', 'Links join two cards. Drop into empty space to branch instead.');
+      return;
+    }
+    if (end) return; // dropped on a line: nothing to do
+    branchMenuAt(g.startId!, g.startKind === 'fragment', e.clientX, e.clientY);
+  }
+
+  /** The menu a gesture opens when a card is dragged into empty space. */
+  function branchMenuAt(startId: string, isCard: boolean, clientX: number, clientY: number) {
+    const at = sceneAt(clientX, clientY);
+    setMenu({
+      x: clientX, y: clientY, title: 'Branch from here',
+      items: [
+        { id: 'card', label: 'New card here', icon: <IconBranch />, run: () => addBranch(startId, at) },
+        { id: 'pivot', label: 'Explore a different angle here', icon: <IconExplore />, disabled: !isCard || !!pivot, run: () => startPivot(startId, { at }) },
+      ],
+    });
+  }
+
+  /** Right-click without dragging: what can be done with what is under the pointer. */
+  function openContextMenu(clientX: number, clientY: number) {
+    const hit = hitAt(clientX, clientY);
+    const at = sceneAt(clientX, clientY);
+    if (hit?.kind === 'fragment') { api!.updateScene({ appState: selectionFor(hit.id) as any }); setMenu({ x: clientX, y: clientY, title: nameOf(byId(hit.id)!), items: cardItems(hit.id, { x: clientX, y: clientY }) }); return; }
+    if (hit?.kind === 'edge') { const arrow = byId(hit.id); api!.updateScene({ appState: { selectedElementIds: { [hit.id]: true } } as any }); setMenu({ x: clientX, y: clientY, title: 'Connection', items: connectionItems(hit.id, !!arrow && /^origin-\d+$/.test(arrow.id)) }); return; }
+    if (hit) return; // headers, pictures: their own editors
+    setMenu({ x: clientX, y: clientY, items: [
+      { id: 'add', label: 'New card here', icon: <IconPlus />, run: () => newFragment({ x: at.x - 140, y: at.y - 60 }) },
+      { id: 'image', label: 'Add image…', icon: <IconPlus />, run: () => fileInput.current?.click() },
+      { id: 'fit', label: 'Zoom to fit', run: () => zoom('fit') },
+    ] });
+  }
+
+  const cardItems = (id: string, at: { x: number; y: number }): PopItem[] => [
+    { id: 'explore', label: 'Explore a different angle', icon: <IconExplore />, disabled: !!pivot, run: () => startPivot(id) },
+    { id: 'branch', label: 'Add a branch', icon: <IconBranch />, run: () => addBranch(id) },
+    { id: 'connect', label: 'Connect to another card…', icon: <IconLink />, run: () => { setConnectFrom(id); } },
+    { id: 'lenses', label: 'Look at it another way…', icon: <IconLens />, sepBefore: true, run: () => lensMenuAt(id, at.x, at.y) },
+    { id: 'edit', label: 'Edit', icon: <IconEdit />, run: () => openEditor({ id, kind: 'fragment' }) },
+    { id: 'delete', label: 'Delete', danger: true, run: () => remove(id) },
+  ];
+
+  const connectionItems = (arrowId: string, isOrigin: boolean): PopItem[] => [
+    { id: 'explore', label: 'Explore a new angle from here', icon: <IconExplore />, disabled: !!pivot, run: () => pivotFromConnection(arrowId) },
+    { id: 'branch', label: 'Add a branch from here', icon: <IconBranch />, run: () => branchFromConnection(arrowId) },
+    { id: 'edit', label: 'Edit the label…', icon: <IconEdit />, sepBefore: true, run: () => openEditor({ id: arrowId, kind: 'edge' }) },
+    { id: 'cut', label: isOrigin ? 'Cut (not for the line from the question)' : 'Cut this connection', icon: <IconCut />, danger: true, disabled: isOrigin, run: () => cutConnections([{ id: arrowId, kind: arrowKind(arrowId) }]) },
+  ];
+  const arrowKind = (id: string): 'tether' | 'link' => (byId(id)?.customData?.kind === 'tether' ? 'tether' : 'link');
+
+  function lensMenuAt(id: string, x: number, y: number) {
+    setMenu({ x, y, title: 'Look at it another way', items: LENS_CHOICES.map(l => ({ id: l.id, label: l.label, detail: l.kind === 'argument' ? '✦ AI' : undefined, disabled: !!lensing, run: () => void startLens(id, l.id) })) });
+  }
+
+  // Which key is held decides what a left-button drag does (L: link/branch, K: cut). Excalidraw's own letter shortcuts
+  // for those keys are kept out of the way while the canvas has focus.
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || isEditable(e.target) || viewRef.current === 'timeline') return;
+      const k = e.key.toLowerCase();
+      if (k !== 'l' && k !== 'k') return;
+      e.stopPropagation();
+      e.preventDefault();
+      heldRef.current = k; setHeld(k);
+    };
+    const up = (e: KeyboardEvent) => { if (e.key.toLowerCase() === heldRef.current) { heldRef.current = null; setHeld(null); } };
+    const clear = () => { heldRef.current = null; setHeld(null); };
+    window.addEventListener('keydown', down, true);
+    window.addEventListener('keyup', up, true);
+    window.addEventListener('blur', clear);
+    return () => { window.removeEventListener('keydown', down, true); window.removeEventListener('keyup', up, true); window.removeEventListener('blur', clear); };
+  }, []);
+
+  useEffect(() => {
+    if (!connectFrom) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setConnectFrom(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [connectFrom]);
+
+  // What the bar over a selected card or connection can do (read at click time, so it is never stale).
+  const barActions = useRef<BarActions>(null as unknown as BarActions);
+  barActions.current = {
+    busy: !!pivot,
+    explore: id => startPivot(id),
+    branch: id => addBranch(id),
+    connect: id => setConnectFrom(id),
+    lenses: (id, at) => lensMenuAt(id, at.x, at.y),
+    more: (id, at) => setMenu({ x: at.x, y: at.y, title: nameOf(byId(id) ?? ({} as El)), items: cardItems(id, at).filter(i => i.id === 'edit' || i.id === 'delete') }),
+    exploreFrom: id => pivotFromConnection(id),
+    branchFrom: id => branchFromConnection(id),
+    editLink: id => openEditor({ id, kind: 'edge' }),
+    cut: id => { if (/^origin-\d+$/.test(id)) say('info', 'The line from your question stays: it is what keeps this collection part of the web.'); else cutConnections([{ id, kind: arrowKind(id) }]); },
+  };
 
   useEffect(() => {
     if (!sticking) return;
@@ -319,13 +490,58 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
 
   // ── Pivot: grow a new collection out of a card ────────────────────────────
 
-  function startPivot(cardId: string) {
+  /** `from` is the element the new collection grows out of; `seed` what it is seeded with (the card itself unless given); `at` where its header goes (default: on past `from`). */
+  function startPivot(cardId: string, opts: { seed?: GeneratedFragment; at?: { x: number; y: number } } = {}) {
     const el = byId(cardId);
-    if (!api || !el || pivot) return;
+    const seed = opts.seed ?? el?.customData?.fragment;
+    if (!api || !el || !seed || pivot) return;
     setEditing(null);
     setPivot({ status: 'Searching your KB…' });
+    pivotAt.current = opts.at;
     const prefix = `pv-${crypto.randomUUID().slice(0, 8)}`;
-    cancelPivot.current = window.webs.pivot({ card: el.customData.fragment, usedPassageIds: usedPassageIds(scene()) }, ev => onPivotEvent(prefix, cardId, ev));
+    cancelPivot.current = window.webs.pivot({ card: seed, usedPassageIds: usedPassageIds(scene()), query: model.query }, ev => onPivotEvent(prefix, cardId, ev));
+  }
+
+  /** A new card growing out of `sourceId` (or placed at `at`), tied to it by a tether, opened for writing. */
+  function addBranch(sourceId: string, at?: { x: number; y: number }) {
+    const src = byId(sourceId);
+    if (!api || !src) return;
+    const fragment: GeneratedFragment = { type: 'concept', title: 'new branch', body: 'Say what this branch is about.', tags: [] };
+    const size = cardSize(fragment);
+    const spot = at ? { x: at.x - size.width / 2, y: at.y - size.height / 2 } : branchSpot(scene(), sourceId, size.width, size.height);
+    if (!spot) return;
+    const id = newFragment(spot, undefined, fragment, false);
+    apply(addTether(scene(), sourceId, id, makeArrow, 760));
+    api.updateScene({ appState: selectionFor(id) as any });
+    setEditing({ kind: 'fragment', id, fragment });
+    reveal({ x: spot.x, y: spot.y, width: size.width, height: size.height });
+  }
+
+  /** Pivot from a connection: the new angle grows on past its target, seeded with what the line says. */
+  function pivotFromConnection(arrowId: string, at?: { x: number; y: number }) {
+    const seed = connectionSeed(scene(), arrowId, model.query, model.context ?? '');
+    if (!seed) { say('error', 'That connection is missing one of its ends.'); return; }
+    startPivot(seed.target.id, { seed: seed.card, at });
+  }
+
+  /** Branch from a connection: a new card past its target. */
+  function branchFromConnection(arrowId: string, at?: { x: number; y: number }) {
+    const seed = connectionSeed(scene(), arrowId, model.query, model.context ?? '');
+    if (!seed) { say('error', 'That connection is missing one of its ends.'); return; }
+    addBranch(seed.target.id, at);
+  }
+
+  /** Remove connections: tethers are unstuck, other lines deleted. The line from the origin to a collection is never cut. */
+  function cutConnections(cuts: Array<{ id: string; kind: 'tether' | 'link' }>) {
+    if (!cuts.length) return;
+    let next = scene();
+    for (const c of cuts) {
+      const el = next.find(e => e.id === c.id);
+      if (!el) continue;
+      next = c.kind === 'tether' ? removeTether(next, el.endBinding?.elementId) : removeBox(next, c.id);
+    }
+    apply(next);
+    say('info', cuts.length === 1 ? 'Cut 1 connection.' : `Cut ${cuts.length} connections.`);
   }
 
   function stopPivot() {
@@ -339,7 +555,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     switch (ev.type) {
       case 'status': setPivot({ status: ev.message }); break;
       case 'plan': {
-        const pos = placePivot(scene(), cardId, ev.cards.length);
+        const pos = placePivot(scene(), cardId, ev.cards.length, pivotAt.current);
         if (!pos) { stopPivot(); say('error', 'The card this was growing from is gone.'); return; }
         const added = addPivotCluster(scene(), { id: prefix, ...pos, title: ev.title, lens: ev.lens, fromCardId: cardId, cards: ev.cards }, build);
         let next = addThread(added.elements, { id: `${prefix}-thread`, fromId: cardId, toId: prefix, label: ev.edge }, build, makeArrow);
@@ -607,6 +823,8 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
       { id: 'add-fragment', group: 'Actions', label: 'Add fragment', keywords: 'new card', run: addFreeFragment },
       { id: 'add-image', group: 'Actions', label: 'Add image', keywords: 'picture photo', run: () => fileInput.current?.click() },
       { id: 'zoom-fit', group: 'Actions', label: 'Zoom to fit', hint: '⇧1', keywords: 'view', run: () => zoom('fit') },
+      ...(selected ? [{ id: 'branch', group: 'Actions', label: 'Add a branch from this card', detail: selected.customData.fragment?.title, keywords: 'new card child grow', run: () => addBranch(selected.id) }] : []),
+      { id: 'gestures', group: 'Actions', label: 'Link, branch and cut: how', detail: 'right-drag, or hold L / K and drag', keywords: 'gesture wrangler connect cut knife', run: () => say('info', 'Drag from a card to another card to link them, or into empty space to branch. Drag across lines in empty space to cut them. Use the right mouse button, or hold L (link, branch) or K (cut) and drag.') },
       ...(selected && !pivot ? [{ id: 'explore', group: 'Actions', label: 'Explore a different angle', detail: selected.customData.fragment?.title, run: () => startPivot(selected.id) }] : []),
       ...(connecting ? [] : (pair => (pair && !hasLink(scene(), pair[0].id, pair[1].id) ? [{ id: 'connect', group: 'Actions', label: 'Connect these two cards…', detail: `${pair[0].customData.fragment.title} → ${pair[1].customData.fragment.title}`, keywords: 'link relate arrow', run: () => setConnecting({ a: pair[0].id, b: pair[1].id, busy: false }) }] : []))(selectedPair())),
       ...(selected && !lensing ? LENS_CHOICES.map(l => ({ id: `lens-${l.id}`, group: 'Look at this card', label: l.label, detail: l.kind === 'argument' ? '✦ AI · not from your notes' : l.description, keywords: `${l.description} ${selected.customData.fragment?.title ?? ''}`, run: () => startLens(selected.id, l.id) })) : []),
@@ -628,7 +846,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   return (
     <div className="canvas">
       {view === 'timeline' && <TimelineView topic={model.query} cards={timelineCards} onOpen={(id, kind) => openEditor({ id, kind })} />}
-      <div className={`canvas-inner${sticking ? " sticking" : ""}`} style={view === 'timeline' ? { visibility: 'hidden', pointerEvents: 'none' } : undefined} onPointerDownCapture={onPointerDownCapture} onWheelCapture={() => { navigated.current = true; }} onDoubleClickCapture={onDoubleClickCapture} onDragOverCapture={onDragOverCapture} onDropCapture={onDropCapture}>
+      <div ref={innerRef} className={`canvas-inner${sticking || connectFrom ? " sticking" : ""}`} onContextMenuCapture={e => { e.preventDefault(); e.stopPropagation(); }} style={view === 'timeline' ? { visibility: 'hidden', pointerEvents: 'none' } : undefined} onPointerDownCapture={onPointerDownCapture} onWheelCapture={() => { navigated.current = true; }} onDoubleClickCapture={onDoubleClickCapture} onDragOverCapture={onDragOverCapture} onDropCapture={onDropCapture}>
         <Excalidraw
           excalidrawAPI={a => { setApi(a); if (import.meta.env.DEV) (window as unknown as { __api?: unknown }).__api = a; /* dev only: lets test scripts drive the canvas */ }}
           onChange={handleChange as any}
@@ -641,6 +859,15 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
         />
         <FlowOverlay api={api} hidden={view === 'timeline'} />
         <LodOverlay api={api} hidden={view === 'timeline'} />
+        <SelectionBar api={api} actions={barActions} hidden={view === 'timeline' || !!menu || !!trail} />
+        {trail && (
+          <svg className="gesture" aria-hidden>
+            {trail.mode === 'link'
+              ? <><line x1={trail.ax} y1={trail.ay} x2={trail.bx} y2={trail.by} stroke="#F2F2F2" strokeWidth="1.5" strokeDasharray="5 5" strokeLinecap="round" /><circle cx={trail.bx} cy={trail.by} r="4" fill="#F2F2F2" /></>
+              : <line x1={trail.ax} y1={trail.ay} x2={trail.bx} y2={trail.by} stroke="#E5846F" strokeWidth="2" strokeLinecap="round" />}
+          </svg>
+        )}
+        {held && !trail && <div className="gesture-hint">{held === 'l' ? 'Drag from a card to another card to link them, or into empty space to branch.' : 'Drag across lines to cut them.'}</div>}
       </div>
 
       <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={e => { const f = [...(e.target.files ?? [])]; e.target.value = ''; void importImages(f); }} />
@@ -651,6 +878,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
         inbox={captureUrl ? { count: inbox.items.length, open: inboxOpen, onToggle: () => { setInboxOpen(o => !o); void refreshInbox(); } } : undefined}
         chips={[
           ...(sticking ? [{ text: 'Click the card or label it should stay near', action: { label: 'Cancel', run: () => setSticking(null) } }] : []),
+          ...(connectFrom ? [{ text: 'Click the card to connect it to', action: { label: 'Cancel', run: () => setConnectFrom(null) } }] : []),
           ...(lensing ? [{ text: `${lensing}…` }] : []),
           ...(pivot ? [{ text: `Exploring · ${pivot.status}`, action: { label: 'Stop', run: stopPivot } }] : []),
         ]}
@@ -661,6 +889,8 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
         })()}
         onZoom={zoom}
       />
+
+      {menu && <PopMenu x={menu.x} y={menu.y} title={menu.title} items={menu.items} onClose={() => setMenu(null)} />}
 
       {inboxOpen && captureUrl && (
         <InboxPanel

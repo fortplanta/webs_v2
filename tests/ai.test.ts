@@ -1,3 +1,4 @@
+import { aiWeb } from '../src/backend/strategies/ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WebEvent } from '../src/backend/events';
 import { WebsError } from '../src/backend/errors';
@@ -227,5 +228,15 @@ describe('AI cards are held to the reference passages', () => {
     expect(frags.map(f => f.fragment.title)).toEqual(['plain explanation']);
     expect(users.at(-1)).toMatch(/refused because they contained: a year or figure \(1477\)/);
     expect(users[0]).toMatch(/No reference passages were found/);
+  });
+});
+
+describe('a later wave of AI cards', () => {
+  it('never repeats a title already on the web', async () => {
+    const outline1 = JSON.stringify({ context: 'c', clusters: [{ title: 'Angle', edge: 'led to' }] });
+    const llm: LlmService = { call: async () => outline1, async *stream() { yield JSON.stringify({ cluster: 0, type: 'concept', title: 'Memory cells', body: 'Body one.', bridge: 'b' }) + '\n' + JSON.stringify({ cluster: 0, type: 'concept', title: 'Fresh idea', body: 'Body two.', bridge: 'b' }) + '\n'; } };
+    const evs: any[] = [];
+    for await (const e of aiWeb({ query: 'q', signal: new AbortController().signal, ai: { llm, model: 'm', topUp: true }, start: 0, count: 1, perCollection: 1, seenTitles: ['memory cells'] })) evs.push(e);
+    expect(evs.filter(e => e.type === 'fragment').map(e => e.fragment.title)).toEqual(['Fresh idea']);
   });
 });

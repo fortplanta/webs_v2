@@ -16,3 +16,11 @@ export const IconCheck = () => icon(<path d="m3.5 8.5 3 3 6-7" />);
 export const IconFit = () => icon(<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" />);
 export const IconMinus = () => icon(<path d="M3.5 8h9" />);
 export const IconBook = () => icon(<><path d="M2.5 3.5c1.8-.6 3.700-.6 5.500.5v8.500c-1.800-1.100-3.700-1.100-5.500-.5v-8.500Z" /><path d="M13.500 3.500c-1.800-.6-3.700-.6-5.500.5v8.500c1.800-1.100 3.700-1.100 5.500-.5v-8.500Z" /></>);
+
+export const IconExplore = () => icon(<><path d="M4 12 12 4" /><path d="M6.5 4H12v5.5" /></>);
+export const IconBranch = () => icon(<><circle cx="4" cy="3.5" r="1.4" /><circle cx="4" cy="12.5" r="1.4" /><circle cx="12" cy="6" r="1.4" /><path d="M4 5v6M4 9c0-2 2-3 6.600-3" /></>);
+export const IconLink = () => icon(<><path d="M6.500 9.500a2.500 2.500 0 0 0 3.500 0l2-2a2.500 2.500 0 0 0-3.500-3.500l-.7.700" /><path d="M9.500 6.500a2.500 2.500 0 0 0-3.500 0l-2 2a2.500 2.500 0 0 0 3.500 3.500l.7-.7" /></>);
+export const IconCut = () => icon(<><circle cx="4" cy="4" r="1.600" /><circle cx="4" cy="12" r="1.600" /><path d="M5.300 5 13 11.500M5.300 11 13 4.500" /></>);
+export const IconLens = () => icon(<><circle cx="7" cy="7" r="4" /><path d="m10 10 3.500 3.500" /></>);
+export const IconMore = () => icon(<><circle cx="3.500" cy="8" r=".8" fill="currentColor" /><circle cx="8" cy="8" r=".8" fill="currentColor" /><circle cx="12.500" cy="8" r=".8" fill="currentColor" /></>);
+export const IconEdit = () => icon(<path d="m10.500 3 2.500 2.500L6 12.500 3 13l.5-3L10.500 3Z" />);

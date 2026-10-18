@@ -60,8 +60,8 @@ function fromAi(raw: any, model: string): GeneratedFragment | null {
  * Collections `start`…`start+count-1`. `avoid` are titles already on the canvas. Throws WebsError('ai-error' | 'bad-json');
  * the caller decides whether that is fatal (nothing else to show) or just a warning (the KB part still stands).
  */
-export async function* aiWeb(opts: { query: string; signal: AbortSignal; ai: AiContext; start: number; count: number; perCollection: number; avoid?: string[]; /** Encyclopedia passages on the topic: the only place a name, date or figure may come from. */ reference?: string }): AsyncGenerator<WebEvent> {
-  const { query, signal, ai, start, count, perCollection, avoid = [], reference = '' } = opts;
+export async function* aiWeb(opts: { query: string; signal: AbortSignal; ai: AiContext; start: number; count: number; perCollection: number; avoid?: string[]; /** Encyclopedia passages on the topic: the only place a name, date or figure may come from. */ reference?: string; /** Titles of cards already on the web, so a later wave never repeats them. */ seenTitles?: string[] }): AsyncGenerator<WebEvent> {
+  const { query, signal, ai, start, count, perCollection, avoid = [], reference = '', seenTitles = [] } = opts;
   yield { type: 'status', message: `Nothing in your notes${start > 0 ? ' for the rest' : ''} — asking ${ai.model}…` };
 
   const o = await callJson(ai.llm, { system: AI_OUTLINE_SYSTEM_PROMPT, user: buildAiOutlineMessage(query, count, avoid), json: true, maxTokens: 900 }, raw => parseAiOutline(raw, count), signal);
@@ -73,7 +73,7 @@ export async function* aiWeb(opts: { query: string; signal: AbortSignal; ai: AiC
   yield { type: 'status', message: `${ai.model} is writing cards…` };
   const used = o.titles.map(() => 0);
   const refused: string[] = []; // why cards were thrown out, so the retry can avoid it
-  const written_ = new Set<string>(); // titles already on the web, so the same card is never written twice
+  const written_ = new Set<string>(seenTitles.map(t => t.toLowerCase().trim())); // titles already on the web, so the same card is never written twice
   const titleOf = (f: { title: string }) => f.title.toLowerCase().trim();
   let written = 0;
   {

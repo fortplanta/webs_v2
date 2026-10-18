@@ -4,9 +4,9 @@
 import type { GeneratedFragment } from '../backend/events';
 import { clusterLabel, edgeLabel, FRAG_H, FRAG_W, HEADER_H } from './boxes';
 import { addCard, cardSize } from './card';
+import { growthFrom } from './branch';
 import { clusterFootprint, fanCenters, findClusterSpot } from './layout/organic';
 import { cssVar } from './theme';
-import { originCenter } from './origin';
 import { addBox, updateBox, type Build, type El } from './sceneEdit';
 
 /** KB passages already represented by a card on the canvas — a pivot must not repeat them. */
@@ -24,17 +24,19 @@ export function usedPassageIds(elements: El[]): string[] {
  * as there's free room, numbered after the last collection. `x`/`y` is the header's top-left; `angle` the direction
  * its cards fan toward.
  */
-export function placePivot(elements: El[], sourceId: string, cards = 3): { x: number; y: number; index: number; angle: number } | null {
+export function placePivot(elements: El[], sourceId: string, cards = 3, at?: { x: number; y: number }): { x: number; y: number; index: number; angle: number } | null {
   const live = elements.filter(e => !e.isDeleted && e.type !== 'text' && e.type !== 'arrow' && e.type !== 'line');
   const source = live.find(e => e.id === sourceId);
   if (!source) return null;
   const index = Math.max(-1, ...live.filter(e => e.customData?.kind === 'cluster').map(e => e.customData.index)) + 1;
   const box = (e: El) => ({ x: e.x, y: e.y, width: e.width, height: e.height });
   // Grow on in the direction this card itself grew: away from what it hangs off (its header), or from the origin.
-  const tether = elements.find(e => !e.isDeleted && e.type === 'arrow' && e.customData?.kind === 'tether' && e.endBinding?.elementId === sourceId);
-  const anchor = tether ? live.find(e => e.id === tether.startBinding?.elementId) : undefined;
-  const from = anchor ? { x: anchor.x + anchor.width / 2, y: anchor.y + anchor.height / 2 } : originCenter(elements) ?? undefined;
-  const { header, angle } = findClusterSpot(live.map(box), box(source), cards, from);
+  // dropped at a chosen point: the header goes there and the cards fan on away from the source
+  if (at) {
+    const sx = source.x + source.width / 2, sy = source.y + source.height / 2;
+    return { x: at.x - FRAG_W / 2, y: at.y - HEADER_H / 2, index, angle: (Math.atan2(at.y - sy, at.x - sx) * 180) / Math.PI };
+  }
+  const { header, angle } = findClusterSpot(live.map(box), box(source), cards, growthFrom(elements, sourceId));
   return { x: header.x - FRAG_W / 2, y: header.y - HEADER_H / 2, index, angle };
 }
 

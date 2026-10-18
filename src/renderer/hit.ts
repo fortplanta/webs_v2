@@ -26,7 +26,10 @@ function inside(e: El, x: number, y: number): boolean {
  * does on screen — so a thread drawn behind a card never steals clicks meant for that card.
  */
 export function hitTest(elements: readonly El[], x: number, y: number, zoom: number): Hit | null {
-  const tolerance = 10 / (zoom || 1);
+  // A line gets a generous grab margin in empty space, but over a card it must nearly touch the pointer: zoomed out, a
+  // wide margin would otherwise let a line passing close to a card steal clicks meant for the card.
+  const overCard = elements.some(e => !e.isDeleted && e.type === 'rectangle' && ['fragment', 'cluster', 'image-card'].includes(e.customData?.kind) && inside(e, x, y));
+  const tolerance = (overCard ? 3 : 10) / (zoom || 1);
   for (let i = elements.length - 1; i >= 0; i--) {
     const e = elements[i];
     if (e.isDeleted) continue;

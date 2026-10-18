@@ -91,7 +91,7 @@ describe('runPivot', () => {
   };
   const collect = async (llm: LlmService, req = { card, usedPassageIds: ['history/uses.md#1'] }, signal = new AbortController().signal) => {
     const out: PivotEvent[] = [];
-    for await (const e of runPivot(req, { signal, retriever, llm })) out.push(e);
+    for await (const e of runPivot(req, { signal, retriever, llm, library: null, ai: null, minShared: 0 })) out.push(e);
     return out;
   };
   const picked = async () => {
@@ -110,7 +110,7 @@ describe('runPivot', () => {
     let called = false;
     const llm: LlmService = { call: async () => { called = true; return '{}'; }, async *stream() { /* none */ } };
     const seen: PivotEvent[] = [];
-    for await (const e of runPivot({ card, usedPassageIds: ['history/uses.md#1'] }, { signal: new AbortController().signal, retriever, llm })) { seen.push(e); if (e.type === 'status') break; }
+    for await (const e of runPivot({ card, usedPassageIds: ['history/uses.md#1'] }, { signal: new AbortController().signal, retriever, llm, library: null, ai: null, minShared: 0 })) { seen.push(e); if (e.type === 'status') break; }
     expect(called).toBe(false);
     expect(seen[0].type).toBe('plan');
     const plan = seen[0] as Extract<PivotEvent, { type: 'plan' }>;
@@ -134,7 +134,7 @@ describe('runPivot', () => {
   it('says so plainly when nothing new connects', async () => {
     const all = index.passages.map(p => p.id);
     const evs = await collect(goodLlm(), { card, usedPassageIds: all });
-    expect(evs).toEqual([{ type: 'error', code: 'kb-empty', message: expect.stringContaining('Nothing new') }]);
+    expect(evs).toEqual([{ type: 'error', code: 'kb-empty', message: expect.stringContaining('Nothing in your notes or libraries') }]);
   });
 
   it('keeps the planned collection when the model fails, and reports why', async () => {
@@ -260,5 +260,46 @@ describe('hit-testing follows stacking order', () => {
   });
   it('the thread is still reachable in the gaps where no card covers it', () => {
     expect(hitTest([thread, card], 420, 75, 1)).toEqual({ id: 'thread', kind: 'edge' });
+  });
+});
+
+describe('runPivot beyond the notes', () => {
+  const card: GeneratedFragment = { type: 'concept', title: 'training the immune system with dead bacteria', body: 'A vaccine can use dead bacteria to teach the immune system what a germ looks like.' };
+  const pass = (id: string, text: string, source = 'sample/barbed-wire.md') => ({ id, source, text, lens: 'direct', heading: '', terms: terms(text), score: { value: 1, rel: 1, conn: 0, nov: 1, red: 0 } });
+  const retrieval = (passages: any[]) => ({ query: '', terms: [], considered: passages.length, collections: passages.length ? [{ lens: 'tension', label: 'Another route', verb: 'led to', passages }] : [] });
+  const notes = (passages: any[]): Retriever => ({ retrieve: async () => retrieval([]), retrieveFromCard: async () => retrieval(passages) });
+  const run = async (opts: Parameters<typeof runPivot>[1], req: any = { card, usedPassageIds: [], query: 'how does a vaccine work' }) => { const out: any[] = []; for await (const e of runPivot(req, opts)) out.push(e); return out; };
+  const llm = (over: Partial<LlmService> = {}): LlmService => ({ call: async () => JSON.stringify({ title: 'angle', edge: 'led to' }), async *stream() { /* no cards */ }, ...over });
+  const base = { signal: new AbortController().signal, llm: llm(), minShared: 4 };
+
+  it('ignores notes that only share a word or two with the card, and says so when that leaves nothing', async () => {
+    const wire = pass('w#1', 'Barbed wire fencing changed how the system of open range ranching worked on the prairie.');
+    const evs = await run({ ...base, retriever: notes([wire]), library: null, ai: null });
+    expect(evs).toEqual([{ type: 'error', code: 'kb-empty', message: expect.stringContaining('Nothing in your notes or libraries') }]);
+  });
+
+  it('turns to the libraries when the notes have nothing on topic, marking cards as from there', async () => {
+    const wiki = pass('lib:Vaccine#0', 'A vaccine trains the immune system with dead bacteria so it learns what a germ looks like.', 'lib:Vaccine');
+    const library: any = { retrieve: async () => null, retrieveFromCard: async () => ({ retrieval: retrieval([wiki]), libraries: new Map([['lib', { name: 'lib', label: 'Test Wiki', urlBase: 'https://x.test/wiki/', source: '', articles: 1, passages: 1, importedAt: '' }]]) }) };
+    const evs = await run({ ...base, retriever: notes([pass('w#1', 'Barbed wire fencing changed the prairie.')]), library, ai: null });
+    const plan = evs.find(e => e.type === 'plan');
+    expect(plan.cards[0]).toMatchObject({ origin: 'wiki', sourceLabel: 'Test Wiki', kbSources: ['Vaccine'] });
+  });
+
+  it('asks the AI for a new angle when neither the notes nor the libraries have anything, grounded in the card\'s subject', async () => {
+    const seen: string[] = [];
+    const aiLlm = llm({
+      call: async () => JSON.stringify({ context: 'About vaccines.', clusters: [{ title: 'Memory cells', edge: 'ends in' }] }),
+      async *stream(o) { seen.push(o.user); yield JSON.stringify({ cluster: 0, type: 'concept', title: 'Memory B cells', body: 'After the first exposure some cells stay behind and remember the germ.', bridge: 'Why a second exposure is faster.' }) + '\n'; },
+    });
+    const library: any = { retrieve: async () => null, retrieveFromCard: async () => null };
+    const evs = await run({ ...base, retriever: notes([]), library, ai: { llm: aiLlm, model: 'm', topUp: true } });
+    const plan = evs.find(e => e.type === 'plan');
+    expect(plan).toMatchObject({ title: 'Memory cells', lens: 'ai', edge: 'ends in' });
+    expect(plan.cards).toHaveLength(3);
+    const card = evs.find(e => e.type === 'card');
+    expect(card).toMatchObject({ slot: 0, fragment: { title: 'Memory B cells', origin: 'ai' } });
+    expect(seen[0]).toContain('a different angle on "how does a vaccine work"');
+    expect(evs.at(-1)).toEqual({ type: 'done' });
   });
 });
