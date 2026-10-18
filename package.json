@@ -1,6 +1,6 @@
 {
   "name": "webs-v1a",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "private": true,
   "description": "Webs: a local research canvas — explore a topic through your own knowledge base (Electron, React, Excalidraw, Ollama)",
   "main": "out/main/index.js",
