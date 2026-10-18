@@ -187,3 +187,31 @@ describe('tangentEdges', () => {
     expect(tangentEdges(edges, cols, ['glass'])).toEqual([edges[0]]);
   });
 });
+
+import { checkAiClaims, fillerCount } from '../src/backend/narration';
+import { referenceOf } from '../src/backend/strategies/lensed';
+describe('grounding AI-written cards', () => {
+  const ref = 'Johannes Gutenberg made the first printing press in the 15th century. Friedrich Koenig patented a steam press in 1810 in London.';
+  it('lets a card use names, years and figures that the reference passages contain', () => {
+    expect(checkAiClaims('Friedrich Koenig patented a steam press in 1810. Say you print 30 pages a day.', ref).ok).toBe(true);
+  });
+  it('refuses an invented year, percentage or name', () => {
+    expect(checkAiClaims('The press was banned in 1477.', ref)).toMatchObject({ ok: false, reason: expect.stringContaining('1477') });
+    expect(checkAiClaims('Some 40% of Europeans could read.', ref)).toMatchObject({ ok: false, reason: expect.stringContaining('40') });
+    expect(checkAiClaims('Then Aldus Manutius opened a shop.', ref)).toMatchObject({ ok: false, reason: expect.stringContaining('aldus') });
+  });
+  it('treats everything as unverifiable when there are no reference passages: only general explanation passes', () => {
+    expect(checkAiClaims('You keep watching because you already paid for the ticket.', '').ok).toBe(true);
+    expect(checkAiClaims('In 1971 the Washington Post kept going.', '').ok).toBe(false);
+  });
+  it('counts school-essay filler', () => {
+    expect(fillerCount('This concept plays a crucial role and highlights the need.')).toBeGreaterThanOrEqual(3);
+    expect(fillerCount('Bend a paperclip thirty times and it snaps.')).toBe(0);
+  });
+  it('builds the reference from the passages found, once each, capped', () => {
+    const p = (id: string, text: string) => ({ id, source: `lib:${id}`, text, lens: 'direct', heading: '', terms: [], score: { value: 1, rel: 1, conn: 0, nov: 1, red: 0 } }) as any;
+    const out = referenceOf([{ lens: 'direct', label: 'a', verb: 'v', passages: [p('One', 'first text'), p('One', 'first text')] }, { lens: 'direct', label: 'b', verb: 'v', passages: [p('Two', 'x'.repeat(2000))] }] as any, 100);
+    expect(out.split('\n')).toHaveLength(2);
+    expect(out).toContain('(One) first text');
+  });
+});

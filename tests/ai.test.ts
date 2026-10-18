@@ -207,3 +207,25 @@ describe('canvas model with AI collections', () => {
     expect(m.clusters.map(c => [c.title, c.origin])).toEqual([['a', 'ai'], ['b', 'ai']]);
   });
 });
+
+describe('AI cards are held to the reference passages', () => {
+  const outline2 = JSON.stringify({ context: 'About the printing press.', clusters: [{ title: 'Origins', edge: 'led to' }] });
+  const mk = (title: string, body: string) => JSON.stringify({ cluster: 0, type: 'concept', title, body, bridge: 'b' }) + '\n';
+  it('throws out a card that states an unsupported year, and asks again telling the model why', async () => {
+    const users: string[] = [];
+    const llm: LlmService = {
+      call: async () => outline2,
+      async *stream(o) {
+        users.push(o.user);
+        if (/^Collection:/m.test(o.user)) { yield mk('plain explanation', 'You line up metal letters, ink them, and press paper on top. Do that thirty times and you have thirty pages.'); return; }
+        yield mk('invented', 'In 1477 the city of Mainz banned it entirely.');
+      },
+    };
+    const evs: any[] = [];
+    for await (const e of runStrategy('printing press', { strategy: 'lensed', signal: new AbortController().signal, retriever: none, llm, ai: { llm, model: 'm', topUp: false }, library: null, config: { clusterCount: 1, fragmentsPerCluster: 1 } })) evs.push(e);
+    const frags = evs.filter(e => e.type === 'fragment');
+    expect(frags.map(f => f.fragment.title)).toEqual(['plain explanation']);
+    expect(users.at(-1)).toMatch(/refused because they contained: a year or figure \(1477\)/);
+    expect(users[0]).toMatch(/No reference passages were found/);
+  });
+});

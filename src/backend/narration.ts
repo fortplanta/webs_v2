@@ -3,7 +3,18 @@
 // checked against the source passage before it reaches the canvas; what fails the check is dropped and the original
 // stays. This file holds the voice and those checks.
 
-export const NARRATOR_VOICE = `Your voice: curious and a little informal, like a well-read friend who is genuinely interested and thinks out loud. Mix three things: the clear through-line of a good essayist, the plainness of someone explaining it to a smart friend (short sentences, no jargon, no show-off words), and a faint dash of noir — an atmospheric turn of phrase now and then, a wry aside — never more than a touch. Never pretentious, never breathless, never salesy. No clichés like "delve", "tapestry", "journey" or "fascinating".`;
+export const NARRATOR_VOICE = `Your voice: a well-read friend who actually knows this stuff, telling you about it across a table. You sound authoritative because you are specific (you name the person, the year, the place, the mechanism, the case) and never because you sound formal. You sound casual because you talk like a person: plain words, contractions, a short sentence next to a longer one, now and then a dry aside. You respect the reader and you respect the material: never harsh, never lecturing, never breathless, never salesy, never cute at the expense of the facts. Open on the interesting thing, not on a definition. Say what happened or how it works; if it earns it, say in one line why it matters. When something is genuinely disputed, say who disagrees and about what, instead of hedging in general. Write about the subject itself, not about "the concept" or "the idea of" it, and never about the card or the text ("this card explores…"). Avoid school-essay filler: "plays a crucial role", "it is important to note", "highlights", "underscores", "sheds light on", "refers to", "a testament to", "in today's world", "delve", "tapestry", "journey", "fascinating".`;
+
+/** Phrases that mark filler writing. Used to measure bland output and to ask for a rewrite when a card is full of them. */
+export const FILLER_PHRASES = [
+  'plays a crucial role', 'plays a key role', 'plays a vital role', 'it is important to note', "it's important to note", 'important to note that', 'highlights the', 'highlighting the', 'underscores', 'sheds light', 'a testament to', "in today's world", 'refers to the', 'delve', 'tapestry', 'fascinating', 'this concept', 'the concept of', 'the idea of', 'this thesis', 'this card', 'this event exemplifies', 'multifaceted', 'complex interplay', 'nuanced', 'ultimately', 'in conclusion',
+] as const;
+
+/** How many filler phrases `text` contains. */
+export function fillerCount(text: string): number {
+  const t = text.toLowerCase();
+  return FILLER_PHRASES.filter(p => t.includes(p)).length;
+}
 
 const GLUE = new Set(('the this that these those there then they them their what when where which while who whom why how and but for nor not you your our its his her one two three four five six seven eight nine ten may can will would could should also') .split(' '));
 
@@ -41,7 +52,7 @@ export function checkRetelling(source: string, retelling: string, question = '')
   const claims = checkClaims(retelling, source, question);
   if (!claims.ok) return claims;
   const ratio = retelling.length / Math.max(source.length, 1);
-  if (ratio < 0.85) return { ok: false, reason: 'it was shorter than the source, so it left things out' };
+  if (ratio < 0.7) return { ok: false, reason: 'it was shorter than the source, so it left things out' };
   if (ratio > 1.5) return { ok: false, reason: 'it was much longer than the source, so it added things' };
   // nothing may be left out either: every number and name in the source must still be there
   const lower = retelling.toLowerCase(), has = numbers(retelling);
@@ -115,5 +126,23 @@ export function groundedWhen(when: string | undefined, source: string): string |
 export function checkNumbers(text: string, source: string): Check {
   const known = numbers(source);
   for (const n of numbers(text)) if (!known.has(n)) return { ok: false, reason: `a number (${n}) that isn't in the card` };
+  return { ok: true };
+}
+
+const BROAD = new Set('europe europeans european asia asian asians africa african americas america american north south east west western eastern northern southern english french german latin greek roman christian christians church earth world'.split(' '));
+
+/**
+ * An AI-written card is allowed to use a specific name, year or figure only if it can be found in the reference
+ * passages (or the question). A small local model asked to be vivid will happily invent a plausible case, so anything
+ * it states as fact must be checkable; everything else has to be explanation. Small numbers in everyday examples
+ * ("thirty times", "$15") are fine; years, percentages and anything of three digits or more are not.
+ */
+export function checkAiClaims(text: string, reference: string): Check {
+  const ref = reference.toLowerCase();
+  const knownNumbers = numbers(reference);
+  for (const n of numbers(text)) if (n.length >= 3 && !knownNumbers.has(n)) return { ok: false, reason: `a year or figure (${n}) that is not in the reference passages` };
+  const pct = /(\d[\d.]*)\s*(%|percent)/gi;
+  for (const m of text.matchAll(pct)) if (!knownNumbers.has(m[1])) return { ok: false, reason: `a percentage (${m[1]}%) that is not in the reference passages` };
+  for (const w of names(text)) if (!BROAD.has(w) && !ref.includes(w)) return { ok: false, reason: `a name (${w}) that is not in the reference passages` };
   return { ok: true };
 }

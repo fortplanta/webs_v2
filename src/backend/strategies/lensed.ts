@@ -66,6 +66,20 @@ function bestPassage(text: string, candidates: Array<{ id: string; p: SelectedPa
   return bestScore > 0.05 ? best : null;
 }
 
+/** Encyclopedia/notes text on the topic, for the AI to take names, dates and figures from (and be checked against). */
+export function referenceOf(collections: Collection[], maxChars = 5500): string {
+  const seen = new Set<string>(), parts: string[] = [];
+  let n = 0;
+  for (const c of collections) for (const p of c.passages) {
+    if (seen.has(p.id) || n > maxChars) continue;
+    seen.add(p.id);
+    const t = p.text.slice(0, 900);
+    parts.push(`- (${p.source.split(':').pop()}) ${t}`);
+    n += t.length;
+  }
+  return parts.join('\n');
+}
+
 export const lensed: Strategy = async function* (ctx) {
   const q = ctx.query.trim();
   if (!q) throw new WebsError('bad-json', 'Enter a topic first.');
@@ -84,7 +98,7 @@ export const lensed: Strategy = async function* (ctx) {
     if (!ctx.ai) {
       throw new WebsError('kb-empty', 'No results for that query in your notes or your libraries. Add notes to the kb/ folder, try different keywords, or set up an AI provider in Settings to answer from its own knowledge.');
     }
-    yield* aiWeb({ query: q, signal: ctx.signal, ai: ctx.ai, start: 0, count: wanted, perCollection: ctx.config.fragmentsPerCluster });
+    yield* aiWeb({ query: q, signal: ctx.signal, ai: ctx.ai, start: 0, count: wanted, perCollection: ctx.config.fragmentsPerCluster, reference: '' });
     return;
   }
   if (fromLibrary) yield { type: 'status', message: `Nothing in your notes — using ${[...lib!.libraries.values()].map(l => l.label).join(', ')}…` };
@@ -95,7 +109,7 @@ export const lensed: Strategy = async function* (ctx) {
   const ai = ctx.ai?.topUp ? ctx.ai : null;
   const topUp = (start: number, count: number, avoid: string[]) => (async function* (): AsyncGenerator<WebEvent> {
     try {
-      yield* aiWeb({ query: q, signal: ctx.signal, ai: ai!, start, count, perCollection: ctx.config.fragmentsPerCluster, avoid });
+      yield* aiWeb({ query: q, signal: ctx.signal, ai: ai!, start, count, perCollection: ctx.config.fragmentsPerCluster, avoid, reference: referenceOf(collections) });
     } catch (err) {
       if (err instanceof WebsError && err.code !== 'cancelled') yield { type: 'warning', message: `Couldn't add AI collections: ${err.message}` };
       else throw err;

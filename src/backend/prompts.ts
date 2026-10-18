@@ -154,6 +154,8 @@ Rules:
 - "fits" is false if the passage doesn't actually help answer the question; then give only {"passage": "P4", "fits": false}. Don't force a connection.
 - "retelling" is in normal sentence case (capital letters at the start of sentences and for names). It keeps EVERY fact, name and number in the passage and adds none, and it is about as long as the passage: do not shorten it into a summary. If the passage is a list, keep it a list.
 - "title" and "hook" may use only names and numbers that appear in the passage or the question.
+- "hook" is the sharp "so what" in your voice: what this passage changes about how to see the question. Not "this concept highlights…", not a restatement of the passage.
+- "retelling" is where your voice lives: same facts, but the way a person who knows the subject would tell it, with the interesting thing first, plain words, and no filler. Keep names, numbers and dates exactly. You may reorder and tighten, but never add anything.
 - "weight" is 1, 2 or 3: how central this passage is to the through-line (3 = the heart of it, 1 = supporting detail).
 - "when" is optional: the year (or "44 BCE", or "1914–1918") this passage is mainly about, ONLY if the passage itself states it. Never work one out or guess one; leave it out otherwise.
 - "relates" is optional: up to 2 links to OTHER passages when one clearly led to, caused, answers, contradicts or builds on the other, preferably from the vocabulary-sharing pairs listed above. "to" is a passage id; "verb" is a short verb phrase. Leave it out when unsure.
@@ -234,25 +236,41 @@ Rules:
 - Return raw JSON only. Start with { and end with }.`;
 }
 
-export const AI_CARDS_SYSTEM_PROMPT = `You are a knowledge canvas writer. You write short, accurate cards from your general knowledge, one JSON object per line. You never invent quotations, citations, statistics or URLs.
+export const AI_CARDS_SYSTEM_PROMPT = `You are a knowledge canvas writer. You write cards from your general knowledge, one JSON object per line. You never invent quotations, citations, statistics or URLs.
+
+${NARRATOR_VOICE}
+
+Authority comes from being right, then from being specific. Explain how the thing works or why it happens; make it vivid with an everyday example anyone can picture (a movie ticket you already paid for, a paperclip bent back and forth); and use a real named case only when it is famous and well documented and you are certain of it (the Concorde for sunk costs, say). NEVER invent a case, a company's or person's motives, a quotation, a date, a figure or a "study". A plain, correct explanation beats a vivid made-up one every time. If the accepted account is contested, say so plainly. Every card must say something the other cards do not: never reuse a sentence, a closing line or a structure across cards, and do not end on a summary or a moral.
+
+Write in normal sentence case, with capital letters for names and the start of sentences. Don't begin a card with a definition ("X is…", "X refers to…"); begin with what happens, what it looks like, or what goes wrong.
 
 CRITICAL: Output ONLY JSON objects, one per line (JSON Lines). No array wrapper. No markdown code fences. No preamble. No commentary.`;
 
-export function buildAiCardsMessage(query: string, context: string, titles: string[], perCollection: number): string {
+/** The reference block: real text the model must take every name, date and figure from. */
+export function referenceBlock(reference: string): string {
+  return reference.trim()
+    ? `Reference passages from an encyclopedia. Take every name, date and figure from these and nowhere else; you may explain and connect them, but do not go beyond them:\n${reference.trim()}\n`
+    : `No reference passages were found. So use NO specific names, dates, places or figures at all: explain the mechanism in general terms, and make it vivid with an everyday hypothetical framed as one ("Say you've paid for a movie ticket…").\n`;
+}
+
+export function buildAiCardsMessage(query: string, context: string, titles: string[], perCollection: number, reference = ''): string {
   const numbered = titles.map((t, i) => `${i}: ${t}`).join('\n');
   return `Topic: "${query}"
 Overview: ${context}
 
+${referenceBlock(reference)}
 Collections:
 ${numbered}
 
 Write exactly ${perCollection} cards for each collection, collection 0 first, one JSON object per line:
 
-{"cluster": 0, "type": "person | concept | thesis | source | event | era | domain | quote", "title": "card title (2-5 words, lowercase)", "body": "a full paragraph of 4-6 sentences", "bridge": "one sentence on how this connects to the topic", "tags": ["tag1", "tag2"]}
+{"cluster": 0, "type": "person | concept | thesis | source | event | era | domain | quote", "title": "card title (2-5 words, lowercase)", "body": "4-6 sentences in your voice: open on the concrete thing (a mechanism, a pictureable example, or a famous documented case you are certain of), explain how or why it works, and end on what follows from it", "bridge": "one sharp sentence on what this adds to the topic", "tags": ["tag1", "tag2"]}
 
 Rules:
 - "cluster" is the 0-based collection index from the list above.
-- Be accurate and specific. If you are not sure of a fact, leave it out rather than guess.
+- Be accurate first. Names, years and figures come only from the reference passages; otherwise explain the mechanism or use an everyday hypothetical framed as one. Never invent motives, events, quotes or figures.
+- Every card differs from the others in what it says and how it ends.
+- Write about the subject itself, never "the concept of" it. No filler ("plays a crucial role", "highlights", "it is important to note").
 - Do NOT include quotations, URLs, citations or statistics you cannot be certain of. Do not use the "quote" type unless the quotation is famous and certain.
 - Choose "type" by what the card actually is: person, concept, thesis (a contested claim), source (a specific work), event, era, or domain.
 - "tags": 2-4 lowercase words.
@@ -260,18 +278,21 @@ Rules:
 }
 
 /** Cards for one collection only: asked for when a model stopped short of what a whole-web request wanted. */
-export function buildAiCollectionMessage(query: string, context: string, titles: string[], index: number, count: number, have: string[]): string {
+export function buildAiCollectionMessage(query: string, context: string, titles: string[], index: number, count: number, have: string[], reference = '', refused: string[] = []): string {
   return `Topic: "${query}"
 Overview: ${context}
 
+${referenceBlock(reference)}${refused.length ? `\nYour earlier cards were refused because they contained: ${[...new Set(refused)].slice(0, 4).join('; ')}. Do not repeat that: stick to the reference passages, or explain the mechanism without specifics.\n` : ''}
 Collection: "${titles[index]}" (one of: ${titles.join('; ')})
 ${have.length ? `Cards already written for it (do not repeat them): ${have.join('; ')}\n` : ''}
 Write exactly ${count} card${count === 1 ? '' : 's'} for this collection, one JSON object per line:
 
-{"cluster": ${index}, "type": "person | concept | thesis | source | event | era | domain | quote", "title": "card title (2-5 words, lowercase)", "body": "a full paragraph of 4-6 sentences", "bridge": "one sentence on how this connects to the topic", "tags": ["tag1", "tag2"]}
+{"cluster": ${index}, "type": "person | concept | thesis | source | event | era | domain | quote", "title": "card title (2-5 words, lowercase)", "body": "4-6 sentences in your voice: open on the concrete thing (a mechanism, a pictureable example, or a famous documented case you are certain of), explain how or why it works, and end on what follows from it", "bridge": "one sharp sentence on what this adds to the topic", "tags": ["tag1", "tag2"]}
 
 Rules:
-- Be accurate and specific. If you are not sure of a fact, leave it out rather than guess.
+- Be accurate first. Names, years and figures come only from the reference passages; otherwise explain the mechanism or use an everyday hypothetical framed as one. Never invent motives, events, quotes or figures.
+- Every card differs from the others in what it says and how it ends.
+- Write about the subject itself, never "the concept of" it. No filler ("plays a crucial role", "highlights", "it is important to note").
 - Do NOT include quotations, URLs, citations or statistics you cannot be certain of.
 - Choose "type" by what the card actually is: person, concept, thesis (a contested claim), source (a specific work), event, era, or domain.
 - "tags": 2-4 lowercase words.

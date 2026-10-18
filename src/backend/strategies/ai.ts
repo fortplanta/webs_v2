@@ -8,6 +8,7 @@ import { WebsError } from '../errors';
 import type { GeneratedFragment, OverviewEdge, WebEvent } from '../events';
 import type { LlmService } from '../llm';
 import { AI_CARDS_SYSTEM_PROMPT, AI_OUTLINE_SYSTEM_PROMPT, buildAiCardsMessage, buildAiCollectionMessage, buildAiOutlineMessage } from '../prompts';
+import { checkAiClaims, sentenceCase } from '../narration';
 import { normalizeFragment, parseJsonObject, streamObjects } from '../parse';
 import { callJson } from '../repair';
 
@@ -33,13 +34,19 @@ export function parseAiOutline(raw: string, count: number): Outline {
   return { context: String(data?.context ?? '').trim(), titles, edgeLabels };
 }
 
+/** Why an AI card may not be used: it states a name, date or figure that no reference passage supports. */
+function unsupported(f: GeneratedFragment, reference: string): string | null {
+  const verdict = checkAiClaims(`${f.title}. ${f.body} ${f.bridge ?? ''}`, reference);
+  return verdict.ok ? null : verdict.reason;
+}
+
 /** Only fields the AI may set; anything else the model invents (links, KB references) is dropped. */
 function fromAi(raw: any, model: string): GeneratedFragment | null {
   const f = normalizeFragment(raw);
   if (!f) return null;
   const bridge = typeof raw.bridge === 'string' ? raw.bridge.trim().slice(0, 200) : '';
   return {
-    type: f.type, title: f.title, body: f.body,
+    type: f.type, title: f.title, body: sentenceCase(f.body),
     ...(Array.isArray(f.tags) ? { tags: f.tags.map(String).slice(0, 4) } : {}),
     ...(Array.isArray(f.list) ? { list: f.list.map(String).slice(0, 6) } : {}),
     ...(typeof f.era === 'string' ? { era: f.era } : {}),
@@ -53,8 +60,8 @@ function fromAi(raw: any, model: string): GeneratedFragment | null {
  * Collections `start`…`start+count-1`. `avoid` are titles already on the canvas. Throws WebsError('ai-error' | 'bad-json');
  * the caller decides whether that is fatal (nothing else to show) or just a warning (the KB part still stands).
  */
-export async function* aiWeb(opts: { query: string; signal: AbortSignal; ai: AiContext; start: number; count: number; perCollection: number; avoid?: string[] }): AsyncGenerator<WebEvent> {
-  const { query, signal, ai, start, count, perCollection, avoid = [] } = opts;
+export async function* aiWeb(opts: { query: string; signal: AbortSignal; ai: AiContext; start: number; count: number; perCollection: number; avoid?: string[]; /** Encyclopedia passages on the topic: the only place a name, date or figure may come from. */ reference?: string }): AsyncGenerator<WebEvent> {
+  const { query, signal, ai, start, count, perCollection, avoid = [], reference = '' } = opts;
   yield { type: 'status', message: `Nothing in your notes${start > 0 ? ' for the rest' : ''} — asking ${ai.model}…` };
 
   const o = await callJson(ai.llm, { system: AI_OUTLINE_SYSTEM_PROMPT, user: buildAiOutlineMessage(query, count, avoid), json: true, maxTokens: 900 }, raw => parseAiOutline(raw, count), signal);
@@ -65,13 +72,16 @@ export async function* aiWeb(opts: { query: string; signal: AbortSignal; ai: AiC
 
   yield { type: 'status', message: `${ai.model} is writing cards…` };
   const used = o.titles.map(() => 0);
+  const refused: string[] = []; // why cards were thrown out, so the retry can avoid it
   const written_ = new Set<string>(); // titles already on the web, so the same card is never written twice
   const titleOf = (f: { title: string }) => f.title.toLowerCase().trim();
   let written = 0;
   {
-    for await (const obj of streamObjects(ai.llm.stream({ system: AI_CARDS_SYSTEM_PROMPT, user: buildAiCardsMessage(query, o.context, o.titles, perCollection), maxTokens: 4500 }, signal), ai.llm, signal)) {
+    for await (const obj of streamObjects(ai.llm.stream({ system: AI_CARDS_SYSTEM_PROMPT, user: buildAiCardsMessage(query, o.context, o.titles, perCollection, reference), maxTokens: 4500 }, signal), ai.llm, signal)) {
       const fragment = fromAi(obj, ai.model);
       if (!fragment) continue;
+      const refusal = unsupported(fragment, `${reference} ${query} ${o.context}`);
+      if (refusal) { refused.push(refusal); continue; }
       let c = Number((obj as any).cluster);
       if (!Number.isInteger(c) || c < 0 || c >= o.titles.length || used[c] >= perCollection) c = used.findIndex(n => n < perCollection);
       if (c < 0) continue; // every slot filled
@@ -81,22 +91,26 @@ export async function* aiWeb(opts: { query: string; signal: AbortSignal; ai: AiC
       written++;
     }
   }
-  // Smaller local models often stop after a few cards however many were asked for: ask for what is missing, one collection at a time.
+  // Smaller local models often stop after a few cards however many were asked for, and cards that state a name, date or
+  // figure the reference passages don't contain are thrown out: ask for what is missing, one collection at a time.
   for (let c = 0; c < o.titles.length; c++) {
-    if (used[c] >= perCollection || signal.aborted) continue;
-    yield { type: 'status', message: `${ai.model} is writing more for “${o.titles[c]}”…` };
-    try {
-      for await (const obj of streamObjects(ai.llm.stream({ system: AI_CARDS_SYSTEM_PROMPT, user: buildAiCollectionMessage(query, o.context, o.titles, c, perCollection - used[c], [...written_]), maxTokens: 2500 }, signal), ai.llm, signal)) {
-        const fragment = fromAi(obj, ai.model);
-        if (!fragment || used[c] >= perCollection) continue;
-        if (written_.has(titleOf(fragment))) continue;
-        written_.add(titleOf(fragment));
-        yield { type: 'fragment', cluster: start + c, slot: used[c]++, fragment };
-        written++;
+    for (let attempt = 0; attempt < 2 && used[c] < perCollection && !signal.aborted; attempt++) {
+      yield { type: 'status', message: `${ai.model} is writing more for “${o.titles[c]}”…` };
+      try {
+        for await (const obj of streamObjects(ai.llm.stream({ system: AI_CARDS_SYSTEM_PROMPT, user: buildAiCollectionMessage(query, o.context, o.titles, c, perCollection - used[c], [...written_], reference, refused), maxTokens: 2500 }, signal), ai.llm, signal)) {
+          const fragment = fromAi(obj, ai.model);
+          if (!fragment || used[c] >= perCollection) continue;
+          const refusal = unsupported(fragment, `${reference} ${query} ${o.context}`);
+          if (refusal) { refused.push(refusal); continue; }
+          if (written_.has(titleOf(fragment))) continue;
+          written_.add(titleOf(fragment));
+          yield { type: 'fragment', cluster: start + c, slot: used[c]++, fragment };
+          written++;
+        }
+      } catch (err) {
+        if (err instanceof WebsError && err.code === 'cancelled') throw err;
+        if (written === 0 && attempt === 1) throw err; // nothing at all to show: let the caller say why
       }
-    } catch (err) {
-      if (err instanceof WebsError && err.code === 'cancelled') throw err;
-      if (written === 0) throw err; // nothing at all to show: let the caller say why
     }
   }
   if (written === 0) throw new WebsError('bad-json', 'The AI returned no usable cards.');
