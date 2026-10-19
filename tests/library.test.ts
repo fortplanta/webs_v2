@@ -167,3 +167,60 @@ describe('library tier', () => {
     expect(evs).toEqual([{ type: 'error', code: 'kb-empty', message: expect.stringContaining('libraries') }]);
   });
 });
+
+describe('importing a dump that is still downloading, and resuming', () => {
+  const many = (n: number) => `<mediawiki>${Array.from({ length: n }, (_, i) => page(`Article ${i}`, lead(`Subject number ${i}`))).join('\n')}</mediawiki>`;
+  const meta = (file: string) => { const lib = LibraryDb.open(file); const m = lib.meta(); lib.close(); return m; };
+
+  it('reads parts as they grow and finishes when the last is complete', async () => {
+    const xmlText = many(12), cut = Math.floor(xmlText.length / 2);
+    const a = path.join(dir, 'grow.partA'), b = path.join(dir, 'grow.partB');
+    const bytes = Buffer.from(xmlText), partA = bytes.subarray(0, cut), partB = bytes.subarray(cut);
+    fs.writeFileSync(a, partA.subarray(0, 100)); // only a little of it exists to begin with
+    const out = path.join(dir, 'grow.db');
+    const running = importDump({ dump: 'grow.xml', out, name: 'grow', label: 'Grow', urlBase: 'https://x.test/wiki/', follow: [{ file: a, size: partA.length }, { file: b, size: partB.length }] });
+    await new Promise(r => setTimeout(r, 300));
+    fs.appendFileSync(a, partA.subarray(100));  // the rest of part A arrives...
+    await new Promise(r => setTimeout(r, 300));
+    fs.writeFileSync(b, partB);                 // ...then part B appears whole
+    const m = await running;
+    expect(m.articles).toBe(12);
+    const db = LibraryDb.open(out);
+    expect(db.search('subject number 7').some(h => h.title === 'Article 7')).toBe(true);
+    db.close();
+  }, 20000);
+
+  it('picks an interrupted import up where it stopped, ending with exactly what an uninterrupted one gives', async () => {
+    const file = path.join(dir, 'resume.xml');
+    fs.writeFileSync(file, many(30));
+    const out = path.join(dir, 'resume.db');
+    const base = { dump: file, out, name: 'resume', label: 'R', urlBase: 'https://x.test/wiki/' };
+    await expect(importDump({ ...base, resume: true, maxPages: 11 })).rejects.toThrow('stopped early'); // "killed" after 11 pages
+    const resumed = LibraryDb.resume(out);
+    expect(resumed?.pagesSeen).toBe(11);
+    resumed!.lib.abandon();
+    const m = await importDump({ ...base, resume: true });
+    expect(m.articles).toBe(30);
+    const whole = path.join(dir, 'whole.db');
+    const full = await importDump({ ...base, out: whole });
+    expect(m.passages).toBe(full.passages);
+    const db = LibraryDb.open(out);
+    expect(db.search('subject number 29').some(h => h.title === 'Article 29')).toBe(true);
+    expect(db.search('subject number 3').filter(h => h.title === 'Article 3')).toHaveLength(1); // nothing imported twice
+    db.close();
+    expect(fs.existsSync(`${out}-wal`)).toBe(false);   // finished: one plain, read-only-openable file
+  }, 20000);
+
+  it('does not list a library whose import has not finished', async () => {
+    const lib = path.join(dir, 'unfinished'); fs.mkdirSync(lib);
+    const l = LibraryDb.create(path.join(lib, 'half.db'), { name: 'half', label: 'Half', urlBase: 'https://x.test/wiki/', source: 't' }, { durable: true });
+    l.begin(); l.addArticle('A', [{ heading: '', text: lead('Something') }]); l.checkpoint(1); l.commit();
+    expect(listLibraries(lib)).toEqual([]);   // still being built
+    l.abandon();
+  });
+
+  it('has nothing to resume from a finished or missing library', async () => {
+    expect(LibraryDb.resume(path.join(dir, 'nope.db'))).toBeNull();
+    expect(LibraryDb.resume(path.join(dir, 'whole.db'))).toBeNull();
+  });
+});

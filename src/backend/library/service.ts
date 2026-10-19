@@ -40,6 +40,7 @@ export function listLibraries(dir: string): LibraryInfo[] {
       const db = LibraryDb.open(file);
       const m = db.meta();
       db.close();
+      if (!m.importedAt) continue; // an import still running (or interrupted): not usable yet
       out.push({ name: m.name || f.replace(/\.db$/, ''), label: m.label, articles: m.articles, passages: m.passages, bytes: fs.statSync(file).size });
     } catch { /* not a library (or unreadable): skip it */ }
   }
