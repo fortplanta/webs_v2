@@ -11,6 +11,8 @@ import type { Command } from './commands';
 import { TimelineView } from './TimelineView';
 import { LodOverlay } from './LodOverlay';
 import { FlowOverlay } from './FlowOverlay';
+import { FxOverlay } from './FxOverlay';
+import { sound } from './sound';
 import { PopMenu, type PopItem } from './PopMenu';
 import { SelectionBar, type BarActions } from './SelectionBar';
 import { branchSpot, connectionSeed } from './branch';
@@ -151,6 +153,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   useEffect(() => () => { clearTimeout(timer.current); clearTimeout(noticeTimer.current); cancelPivot.current?.(); }, []);
 
   function say(kind: 'info' | 'error', text: string) {
+    if (kind === 'error') sound.play('error');
     clearTimeout(noticeTimer.current);
     setNotice({ kind, text });
     noticeTimer.current = setTimeout(() => setNotice(null), kind === 'error' ? 12_000 : 7_000);
@@ -514,6 +517,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     if (!spot) return;
     const id = newFragment(spot, undefined, fragment, false);
     apply(addTether(scene(), sourceId, id, makeArrow, 760));
+    sound.play('branch');
     api.updateScene({ appState: selectionFor(id) as any });
     setEditing({ kind: 'fragment', id, fragment });
     reveal({ x: spot.x, y: spot.y, width: size.width, height: size.height });
@@ -543,6 +547,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
       next = c.kind === 'tether' ? removeTether(next, el.endBinding?.elementId) : removeBox(next, c.id);
     }
     apply(next);
+    sound.play('cut');
     say('info', cuts.length === 1 ? 'Cut 1 connection.' : `Cut ${cuts.length} connections.`);
   }
 
@@ -773,6 +778,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
       if (!said && v.link === 'none') { say('info', v.note || 'The model sees no real link between these two.'); setConnecting(null); return; }
       const { elements, id } = addLink(scene(), { from: a.id, to: b.id, verdict: v, by: said ? 'user' : 'model', ...(said ? { explanation: said } : {}) }, build, makeArrow);
       apply(elements);
+      sound.play('link');
       setConnecting(null);
       setEditing({ kind: 'edge', id, label: v.verb, link: { by: said ? 'user' : 'model', tier: v.tier, link: v.link, note: v.note, ...(said ? { explanation: said } : {}) } });
     } finally { setConnecting(c => (c ? { ...c, busy: false } : c)); }
@@ -934,6 +940,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
           }}
         />
         <FlowOverlay api={api} hidden={view === 'timeline'} />
+        <FxOverlay api={api} phase={model.phase} hidden={view === 'timeline'} />
         <LodOverlay api={api} hidden={view === 'timeline'} />
         <SelectionBar api={api} actions={barActions} hidden={view === 'timeline' || !!menu || !!trail} />
         {trail && (

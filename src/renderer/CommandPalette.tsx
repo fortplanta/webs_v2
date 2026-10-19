@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { filterCommands, type Command } from './commands';
 import { IconCheck } from './icons';
+import { sound } from './sound';
 
 const IconSearch = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" /></svg>
@@ -31,8 +32,8 @@ export function CommandPalette({ commands, onClose }: CommandPaletteProps) {
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') { e.preventDefault(); onClose(); }
-    else if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => (shown.length ? (a + 1) % shown.length : 0)); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => (shown.length ? (a - 1 + shown.length) % shown.length : 0)); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); sound.play('tick', 0.5); setActive(a => (shown.length ? (a + 1) % shown.length : 0)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); sound.play('tick', 0.5); setActive(a => (shown.length ? (a - 1 + shown.length) % shown.length : 0)); }
     else if (e.key === 'Enter') { e.preventDefault(); run(shown[active]); }
   }
 

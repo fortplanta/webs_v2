@@ -1,0 +1,53 @@
+/* Micro-interactions, after the brand book's motion rules: animate by how often something happens (the things done
+   hundreds of times only get a press and a colour change under 150 ms; panels and menus that open now and then get a
+   short entrance; the rare moments get the most), every motion has a purpose (feedback, state, or keeping you oriented),
+   ease-out for things arriving, and all of it is off for people who ask for reduced motion. */
+
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);          /* entering */
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);      /* moving on screen */
+  --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);       /* a small pop: something emerging */
+  --dur-instant: 50ms;
+  --dur-fast: 100ms;
+  --dur-base: 200ms;
+  --dur-slow: 350ms;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* ── feedback: every button answers a press, briefly ─────────────────────────────────────────────────────── */
+  :where(.topbar, .bottombar, .editor, .palette, .settings, .query, .update-banner, .popmenu, .selbar, .inbox) button:not(:disabled) {
+    transition: transform var(--dur-fast) var(--ease-out), background-color 150ms ease, color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+  }
+  :where(.topbar, .bottombar, .editor, .settings, .query, .update-banner, .inbox) button:not(:disabled):active { transform: scale(0.96); transition-duration: 60ms; }
+  .icon-btn:not(:disabled):active, .selbar-btn:not(:disabled):active, .split-more:not(:disabled):active { transform: scale(0.92); }
+  .library .open:not(:disabled):active { transform: scale(0.99); }
+
+  /* ── occasional: things that open now and then arrive, quickly ─────────────────────────────────────────── */
+  @keyframes rise-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @keyframes rise-in-centered { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  @keyframes slide-in-right { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes cmdk-in { from { opacity: 0; transform: translateY(-8px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+  .editor { animation: slide-in-right 220ms var(--ease-out) both; }
+  .palette-backdrop { animation: fade-in 120ms ease both; }
+  .palette { animation: cmdk-in 220ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+  .canvas-notice { animation: rise-in-centered 220ms var(--ease-out) both; }
+  .update-banner { animation: rise-in-centered 260ms var(--ease-out) both; }
+  .menu.models-menu { animation: cmdk-in 160ms var(--ease-out) both; transform-origin: top right; }
+  .timeline { animation: fade-in 200ms ease both; }
+  .inbox-panel, .inbox { animation: rise-in 220ms var(--ease-out) both; }
+
+  /* the library list: rows settle in one after another (30–60 ms apart) the first time the screen shows */
+  .library li { animation: rise-in 420ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 45ms); }
+  .query h1 { animation: rise-in 520ms var(--ease-out) both; }
+  .query form { animation: rise-in 520ms var(--ease-out) 60ms both; }
+
+  /* ── state: a working web says so ───────────────────────────────────────────────────────────────────────── */
+  .tab-status { animation: fade-in 200ms ease both; }
+  .tab-stop { transition: opacity 150ms ease; }
+}
+
+/* sound's switch in Settings */
+.sound-row { display: flex; align-items: center; gap: var(--spacing-base); }
+.sound-row input[type='range'] { flex: 1; accent-color: #C4C4C4; }

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { sound } from './sound';
 
 export interface PopItem {
   id: string;
@@ -31,6 +32,7 @@ export function PopMenu({ x, y, items, title, onClose }: { x: number; y: number;
   const ref = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(() => nextEnabled(items, -1, 1));
   const [pos, setPos] = useState({ left: x, top: y });
+  useEffect(() => { sound.play('tick', 0.5); }, []); // it opened
 
   // keep it on screen
   useLayoutEffect(() => {
@@ -43,8 +45,8 @@ export function PopMenu({ x, y, items, title, onClose }: { x: number; y: number;
     const away = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) onClose(); };
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.preventDefault(); onClose(); }
-      else if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => nextEnabled(items, a, 1)); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => nextEnabled(items, a, -1)); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); sound.play('tick', 0.5); setActive(a => nextEnabled(items, a, 1)); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); sound.play('tick', 0.5); setActive(a => nextEnabled(items, a, -1)); }
       else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); const it = items[active]; onClose(); it.run(); }
     };
     window.addEventListener('mousedown', away, true);

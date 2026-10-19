@@ -2,9 +2,11 @@ import { createRoot } from 'react-dom/client';
 import '../styles/fonts.css';
 import '../styles/tokens.css';
 import './app.css';
+import '../styles/motion.css';
 import { App } from './App';
 import { NoBridge } from './NoBridge';
 import { UpdateBanner } from './Updates';
+import { attachInterfaceSounds } from './sound';
 
 // The title bar is the page's own (see the "title bar" rules in app.css); which OS draws the window controls decides
 // where it must leave room for them.
@@ -14,6 +16,9 @@ document.documentElement.dataset.platform = platform;
 const syncFullscreen = () => { document.documentElement.dataset.fullscreen = String(window.innerHeight >= screen.height); };
 window.addEventListener('resize', syncFullscreen);
 syncFullscreen();
+
+// the interface's small sounds: unlock on the first gesture, tick over menus, tock on a press
+attachInterfaceSounds();
 
 // window.webs comes from the Electron preload script; in a plain browser tab it's absent.
 createRoot(document.getElementById('root')!).render(window.webs ? <><App /><UpdateBanner /></> : <NoBridge />);

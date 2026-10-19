@@ -1,4 +1,5 @@
 import { UpdatesPanel } from './Updates';
+import { sound } from './sound';
 import { useEffect, useRef, useState } from 'react';
 import { AI_PRESETS, type AiTestResult, type KbModuleInfo, type Settings, SettingsBundle, SettingsErrors, SettingsPatch } from '../types/settings';
 
@@ -266,6 +267,8 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
             </div>
           </fieldset>
 
+          <SoundSettings />
+
           <fieldset>
             <legend>Capture inbox</legend>
             <label>
@@ -295,5 +298,25 @@ export function SettingsView({ onClose }: { onClose: () => void }) {
         </form>
       </div>
     </div>
+  );
+}
+
+/** The sound switch and volume. They apply at once and are kept on this computer (they are not part of "Save"). */
+function SoundSettings() {
+  const [state, setState] = useState({ on: sound.enabled, volume: sound.volume });
+  useEffect(() => sound.subscribe(() => setState({ on: sound.enabled, volume: sound.volume })), []);
+  return (
+    <fieldset>
+      <legend>Sound</legend>
+      <label className="check">
+        <input type="checkbox" checked={state.on} onChange={e => sound.setEnabled(e.target.checked)} />
+        Interface sounds <span className="meta">small ticks and clicks, made in the app</span>
+      </label>
+      <div className="sound-row">
+        <label htmlFor="sound-volume" className="meta">Volume</label>
+        <input id="sound-volume" type="range" min={0} max={100} value={Math.round(state.volume * 100)} disabled={!state.on}
+          onChange={e => sound.setVolume(Number(e.target.value) / 100)} onPointerUp={() => sound.play('tock')} aria-label="Sound volume" />
+      </div>
+    </fieldset>
   );
 }

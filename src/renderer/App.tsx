@@ -6,6 +6,7 @@ import { CommandPalette } from './CommandPalette';
 import type { Command } from './commands';
 import { SettingsView } from './SettingsView';
 import { buildRows, TopBar, type View } from './TopBar';
+import { sound } from './sound';
 import type { SettingsBundle } from '../types/settings';
 import { UpdateBanner } from './Updates';
 import { hydrateScene } from './sceneEdit';
@@ -189,7 +190,7 @@ export function App() {
         {library.length > 0 && (
           <ul className="library" aria-label="Saved webs">
             {library.map(w => (
-              <li key={w.id}>
+              <li key={w.id} style={{ '--i': library.indexOf(w) } as React.CSSProperties}>
                 <button className="open" onClick={() => open(w.id)}>
                   <span className="title">{w.query}</span>
                   <span className="meta">{w.fragmentCount} fragments · {ago(w.updatedAt)}</span>
@@ -215,6 +216,7 @@ export function App() {
         { id: 'library', group: 'Navigation', label: 'Go to library', keywords: 'home back saved webs', run: back },
       ] : []),
       { id: 'settings', group: 'Navigation', label: 'Open settings', keywords: 'preferences ollama knowledge base', run: () => setShowSettings(true) },
+      { id: 'sound', group: 'Navigation', label: sound.enabled ? 'Turn sound effects off' : 'Turn sound effects on', keywords: 'audio mute volume ticks', run: () => sound.toggle() },
     );
     for (const w of library) cmds.push({ id: `web-${w.id}`, group: 'Saved webs', label: w.query, detail: `${w.fragmentCount} fragments · ${ago(w.updatedAt)}`, run: () => open(w.id) });
     if (bundle) {
