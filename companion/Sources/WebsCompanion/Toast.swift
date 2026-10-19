@@ -5,7 +5,12 @@ final class Toast {
     private var panel: NSPanel?
     private var work: DispatchWorkItem?
 
-    func show(_ text: String, near point: NSPoint) {
+    /// A notice that stays until `hide()` (a run in progress), updated in place with `show(_:near:)` again.
+    func showPersistent(_ text: String, near point: NSPoint) { show(text, near: point, lasting: nil) }
+
+    func hide() { work?.cancel(); panel?.orderOut(nil) }
+
+    func show(_ text: String, near point: NSPoint, lasting seconds: TimeInterval? = 2.4) {
         work?.cancel()
         panel?.orderOut(nil)
         let label = NSTextField(labelWithString: text)
@@ -27,8 +32,9 @@ final class Toast {
         p.setFrameOrigin(NSPoint(x: point.x + 14, y: point.y - box.frame.height - 14))
         p.orderFrontRegardless()
         panel = p
+        guard let seconds else { return }
         let w = DispatchWorkItem { [weak self] in self?.panel?.orderOut(nil) }
         work = w
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4, execute: w)
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: w)
     }
 }

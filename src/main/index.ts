@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, net, protocol, safeStorage, shell } from 'electron';
 import { listLibraries } from '../backend/library/service';
-import { testProvider } from '../backend/provider';
+import { configuredProvider, testProvider } from '../backend/provider';
 import { checkForUpdate, currentState, installUpdate, openReleasePage, startUpdateChecks } from './updater';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -9,12 +9,14 @@ import { runStrategy, strategies } from '../backend/strategies';
 import { runPivot } from '../backend/pivot';
 import { runLens } from '../backend/lenses';
 import { judgeConnection } from '../backend/connections';
-import { listOllamaModels, warmUp } from '../backend/llm';
+import { listOllamaModels, ollamaLlm, warmUp } from '../backend/llm';
 import { listKbModules } from '../backend/kb';
 import { listInbox, markComposted, markFiled, testCapture } from '../backend/capture';
 import { defaultSettings, getSettings, getSettingsOverrides, mergePatches, setSettingsOverrides, validatePatch, publicSettings, setSecretCodec } from '../backend/settings';
 import type { SaveSettingsResult, SettingsBundle, SettingsPatch } from '../types/settings';
 import { WebStore } from '../backend/db';
+import { runAction } from '../backend/companion/run';
+import { startCompanionServer, type CompanionServer } from '../backend/companion/server';
 
 import { migrateLegacyDb, seedKb } from '../backend/firstRun';
 
@@ -170,6 +172,10 @@ function warmOnce() {
 }
 ipcMain.on('webs:warmup', warmOnce);
 
+/** Started by the Webs Companion with --background: no window until you open the app, and no Dock icon in the meantime. */
+const background = process.argv.includes('--background');
+let companion: CompanionServer | null = null;
+
 function createWindow() {
   // A hybrid title bar: the OS still draws the window controls (traffic lights on macOS, the system buttons on
   // Windows/Linux), but the page's own top bar fills the title bar area and is draggable where it has no controls.
@@ -183,6 +189,7 @@ function createWindow() {
     minHeight: 480,
     title: 'Webs',
     backgroundColor: '#000000',
+    show: true,
     ...hybrid,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
@@ -204,10 +211,14 @@ function createWindow() {
   else win.loadURL(`${APP_ORIGIN}/index.html`);
 }
 
-app.on('second-instance', () => {
+function showApp() {
   const win = BrowserWindow.getAllWindows()[0];
-  if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
-});
+  if (!win) { createWindow(); app.dock?.show(); return; }
+  if (win.isMinimized()) win.restore();
+  win.show(); win.focus(); app.dock?.show();
+}
+app.on('second-instance', showApp);
+app.on('activate', showApp);
 
 app.whenReady().then(async () => {
   const dbFile = process.env.WEBS_DB?.trim() || path.join(app.getPath('userData'), 'webs.db');
@@ -223,8 +234,11 @@ app.whenReady().then(async () => {
   setSecretCodec(keychainCodec());
   serveRenderer();
   warmOnce();
-  createWindow();
+  // The door the Webs Companion knocks on: long answers are written here, with the same engine and voice as the canvas.
+  companion = await startCompanionServer({ version: app.getVersion(), run: (req, signal) => runAction(req, { llm: configuredProvider() ?? ollamaLlm, signal }) }).catch(err => { console.warn('The companion service did not start:', err); return null; });
+  if (background) app.dock?.hide(); else createWindow();
   startUpdateChecks();
 });
-app.on('will-quit', () => store?.close());
-app.on('window-all-closed', () => app.quit());
+app.on('will-quit', () => { void companion?.close(); store?.close(); });
+// Started in the background (for the companion), closing the window leaves Webs running quietly so the companion keeps working.
+app.on('window-all-closed', () => { if (!background) app.quit(); });

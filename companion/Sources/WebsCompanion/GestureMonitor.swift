@@ -8,6 +8,9 @@ final class GestureMonitor {
 
     var onShow: ((Set<Modifier>, Dragging) -> Void)?
     var onHide: (() -> Void)?
+    /// Esc pressed while no wheel is open (used to cancel a run in progress). Never swallowed.
+    var onEscape: (() -> Void)?
+    private var tap: CFMachPort?
 
     private var monitors: [Any] = []
     private var mouseDown = false
@@ -28,7 +31,8 @@ final class GestureMonitor {
     func start() {
         let mask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .flagsChanged, .keyDown]
         if let m = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] e in self?.handle(e) }) { monitors.append(m) }
-        Journal.trace("monitor started")
+        installEscapeTap()
+        Journal.trace("monitor started (escape \(tap != nil ? "will keep the drag" : "can cancel the drag: no event tap"))")
     }
 
     private func handle(_ e: NSEvent) {
@@ -59,9 +63,9 @@ final class GestureMonitor {
             if pressed.contains(.control) { taps.insert(.control) }
             noteTaps(taps)
         case .keyDown:
-            if e.keyCode == 53, wheelOpen { // escape
-                Journal.trace("escape: wheel cancelled")
-                close()
+            if e.keyCode == 53 {
+                if wheelOpen { if tap == nil { Journal.trace("escape: wheel cancelled"); close() } } // with the tap, it has already been handled (and swallowed)
+                else { onEscape?() }
             }
         case .leftMouseUp:
             mouseDown = false
@@ -70,6 +74,27 @@ final class GestureMonitor {
             if wasOpen { DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in self?.close() } }
         default: break
         }
+    }
+
+    /// Esc while the wheel is open closes the wheel but must not reach the app being dragged from, or macOS would cancel the
+    /// drag as well. A passive monitor cannot stop a key press; an event tap can, so this one swallows Esc, and only Esc, and
+    /// only while the wheel is open.
+    private func installEscapeTap() {
+        let mask = CGEventMask(1 << CGEventType.keyDown.rawValue)
+        let callback: CGEventTapCallBack = { _, type, event, refcon in
+            guard let refcon else { return Unmanaged.passUnretained(event) }
+            let me = Unmanaged<GestureMonitor>.fromOpaque(refcon).takeUnretainedValue()
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput { if let t = me.tap { CGEvent.tapEnable(tap: t, enable: true) }; return Unmanaged.passUnretained(event) }
+            if type == .keyDown, event.getIntegerValueField(.keyboardEventKeycode) == 53, me.wheelOpen {
+                DispatchQueue.main.async { Journal.trace("escape: wheel closed, drag kept"); me.close() }
+                return nil // swallowed: the drag carries on
+            }
+            return Unmanaged.passUnretained(event)
+        }
+        guard let t = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap, eventsOfInterest: mask, callback: callback, userInfo: Unmanaged.passUnretained(self).toOpaque()) else { return }
+        tap = t
+        CFRunLoopAddSource(CFRunLoopGetMain(), CFMachPortCreateRunLoopSource(kCFAllocatorDefault, t, 0), .commonModes)
+        CGEvent.tapEnable(tap: t, enable: true)
     }
 
     private func noteTaps(_ taps: Set<Modifier>) {
@@ -99,7 +124,7 @@ final class GestureMonitor {
         onShow?(mods, d)
     }
 
-    private func close() {
+    func close() {
         chordTimer?.cancel(); chordTimer = nil; pending = []
         wheelOpen = false
         onHide?()
