@@ -34,7 +34,7 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [bundle, setBundle] = useState<SettingsBundle | null>(null);
   const canvasCommands = useRef<(() => Command[]) | null>(null);
-  const imageSink = useRef<((ev: Extract<WebEvent, { type: 'image' }>) => void) | null>(null);
+  const imageSink = useRef<((ev: Extract<WebEvent, { type: 'image' | 'media-link' }>) => void) | null>(null);
 
   const cancel = useRef<(() => void) | null>(null);
   const modelRef = useRef<WebModel | null>(null);
@@ -96,7 +96,7 @@ export function App() {
         return;
       }
       if (!modelRef.current || idRef.current !== id) return;
-      if (ev.type === 'image') { imageSink.current?.(ev); return; } // pictures go straight onto the canvas
+      if (ev.type === 'image' || ev.type === 'media-link') { imageSink.current?.(ev); return; } // pictures go straight onto the canvas
       setCurrent(reduce(modelRef.current, ev));
       if (ev.type === 'done' || ev.type === 'error') saveModelNow(); else saveModelSoon();
     });

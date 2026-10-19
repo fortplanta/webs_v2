@@ -8,7 +8,7 @@ import type { WebConfig } from '../config';
 import { getSettings } from '../settings';
 import { fileKb, type KbService } from '../kb';
 import { ollamaLlm, type LlmService } from '../llm';
-import { fetchLeadImage } from '../library/images';
+import { fetchArticleMedia, fetchLeadImage } from '../library/images';
 import { libraryRetriever, type LibraryRetriever } from '../library/service';
 import { aiContext } from '../provider';
 import { kbRetriever, type Retriever } from '../retrieval/service';
@@ -30,6 +30,8 @@ export interface RunOptions {
   images?: StrategyContext['images'];
   /** Override the reference libraries (tests); `null` = none. */
   library?: LibraryRetriever | null;
+  /** Override the extra media fetching (tests); `null` = none. */
+  media?: StrategyContext['media'];
   /** Override the AI provider (tests); `null` = none. */
   ai?: AiContext | null;
 }
@@ -53,6 +55,7 @@ export async function* runStrategy(query: string, opts: RunOptions): AsyncGenera
       llm: opts.llm ?? ollamaLlm,
       library: opts.library !== undefined ? opts.library : libraryRetriever,
       images: opts.images !== undefined ? opts.images : getSettings().images.wikipedia ? fetchLeadImage : null,
+      media: opts.media !== undefined ? opts.media : opts.images !== undefined ? null : getSettings().images.wikipedia ? fetchArticleMedia : null,
       ai: opts.ai !== undefined ? opts.ai : aiContext(),
     });
     yield { type: 'done' };

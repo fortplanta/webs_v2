@@ -127,3 +127,83 @@ describe('dataUrlToBlob', () => {
     expect(Buffer.from(await b.arrayBuffer()).equals(png)).toBe(true);
   });
 });
+
+import { fetchArticleMedia, imageSize, tileFor } from '../src/backend/library/images';
+const pngOf = (w: number, h: number) => { const b = Buffer.alloc(40); b.writeUInt32BE(0x89504e47, 0); b.writeUInt32BE(0x0d0a1a0a, 4); b.writeUInt32BE(13, 8); b.write('IHDR', 12, 'ascii'); b.writeUInt32BE(w, 16); b.writeUInt32BE(h, 20); return b; };
+describe('fetchArticleMedia', () => {
+  const item = (title: string, caption: string, extra: Record<string, unknown> = {}) => ({ type: 'image', title: `File:${title}`, caption: { text: caption }, showInGallery: true, original: { width: 1200, height: 800 }, srcset: [{ src: `//upload.wikimedia.org/wikipedia/commons/thumb/a/a1/${title}/320px-${title}`, scale: '1x' }], ...extra });
+  const list = { items: [
+    item('Lead.jpg', 'The cathedral from the west', { leadImage: true }),
+    item('Nave.jpg', 'The nave of the cathedral looking east towards the choir'),
+    item('Window.jpg', 'Stained glass window in the south aisle of the cathedral'),
+    item('Commons-logo.png', 'The Commons logo shown here for no reason'),
+    item('NoCaption.jpg', ''),
+    item('Plan.svg', 'A floor plan of the whole cathedral building'),
+    { type: 'video', title: 'File:Bells_ringing.webm', caption: { text: 'The bells ringing' } },
+  ] };
+  const stub = (summary: Record<string, unknown>, tile = true) => vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const u = String(url);
+    if (u.includes('/page/media-list/')) return new Response(JSON.stringify(list), { status: 200 });
+    if (u.includes('/page/summary/')) return new Response(JSON.stringify(summary), { status: 200 });
+    if (u.startsWith('https://tile.openstreetmap.org/')) return tile ? new Response(png, { status: 200, headers: { 'content-type': 'image/png' } }) : new Response('', { status: 404 });
+    return new Response(pngOf(500, 333), { status: 200, headers: { 'content-type': 'image/jpeg' } });
+  }));
+
+  it('picks up to two more pictures that have captions, skipping the lead, logos, vectors and captionless ones', async () => {
+    stub({ title: 'Ely Cathedral', content_urls: { desktop: { page: 'https://en.wikipedia.org/wiki/Ely_Cathedral' } } });
+    const m = await fetchArticleMedia('https://en.wikipedia.org/wiki/', 'Ely Cathedral', 'The cathedral window is made of stained glass.');
+    expect(m.extras.map(e => e.caption)).toEqual(['Stained glass window in the south aisle of the cathedral', 'The nave of the cathedral looking east towards the choir']); // best fit to the passage first
+    expect(m.extras.map(e => e.n)).toEqual([1, 2]);
+    expect(m.extras[0]).toMatchObject({ kind: 'extra', credit: 'Wikimedia Commons', link: 'https://en.wikipedia.org/wiki/Ely_Cathedral', width: 500, height: 333 });
+    expect(m.extras[0].dataURL.startsWith('data:image/jpeg;base64,')).toBe(true);
+  });
+  it('offers a clip as a link to Commons, never as something the app plays', async () => {
+    stub({ title: 'Ely Cathedral' });
+    const m = await fetchArticleMedia('https://en.wikipedia.org/wiki/', 'Ely Cathedral', 'The cathedral bells are rung by ringers.');
+    expect(m.links).toEqual([{ kind: 'video', title: 'The bells ringing', url: 'https://commons.wikimedia.org/wiki/File%3ABells_ringing.webm' }]);
+  });
+  it('skips a clip whose caption has nothing to do with the card', async () => {
+    stub({ title: 'Ely Cathedral' });
+    expect((await fetchArticleMedia('https://en.wikipedia.org/wiki/', 'Ely Cathedral', 'Stained glass and stone.')).links).toEqual([]);
+  });
+  it('makes a map from the article\'s coordinates with the place marked inside one tile', async () => {
+    stub({ title: 'Ely Cathedral', coordinates: { lat: 52.3987, lon: 0.2635 } });
+    const m = await fetchArticleMedia('https://en.wikipedia.org/wiki/', 'Ely Cathedral', '');
+    expect(m.map).toMatchObject({ kind: 'map', width: 256, height: 256, credit: '© OpenStreetMap contributors', caption: 'Where Ely Cathedral is' });
+    expect(m.map!.marker!.x).toBeGreaterThanOrEqual(0); expect(m.map!.marker!.x).toBeLessThanOrEqual(1);
+    stub({ title: 'x', coordinates: { lat: 52, lon: 0 } }, false);
+    expect((await fetchArticleMedia('https://en.wikipedia.org/wiki/', 'x', '')).map).toBeNull(); // no tile, no map
+  });
+  it('is empty for a non-Wikipedia library and when offline', async () => {
+    const f = vi.fn(); vi.stubGlobal('fetch', f);
+    expect(await fetchArticleMedia('https://x.test/wiki/', 'x', '')).toEqual({ extras: [], map: null, links: [] });
+    expect(f).not.toHaveBeenCalled();
+    vi.stubGlobal('fetch', async () => { throw new TypeError('offline'); });
+    expect(await fetchArticleMedia('https://en.wikipedia.org/wiki/', 'x', '')).toEqual({ extras: [], map: null, links: [] });
+  });
+  it('fills in from the English article when the Simple English one has few pictures', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.startsWith('https://simple.wikipedia.org/api/rest_v1/page/media-list/')) return new Response(JSON.stringify({ items: [item('Lead.jpg', 'lead', { leadImage: true })] }), { status: 200 });
+      if (u.startsWith('https://en.wikipedia.org/api/rest_v1/page/media-list/')) return new Response(JSON.stringify(list), { status: 200 });
+      if (u.includes('/page/summary/')) return new Response(JSON.stringify({ title: 'Ely Cathedral', ...(u.startsWith('https://en.') ? { coordinates: { lat: 52.4, lon: 0.26 } } : {}) }), { status: 200 });
+      if (u.startsWith('https://tile.')) return new Response(png, { status: 200, headers: { 'content-type': 'image/png' } });
+      return new Response(pngOf(500, 333), { status: 200, headers: { 'content-type': 'image/jpeg' } });
+    }));
+    const m = await fetchArticleMedia('https://simple.wikipedia.org/wiki/', 'Ely Cathedral', 'stained glass');
+    expect(m.extras).toHaveLength(2);
+    expect(m.map).not.toBeNull(); // the coordinates came from the English summary
+  });
+  it('reads image sizes from headers', () => {
+    expect(imageSize(pngOf(640, 480))).toEqual({ width: 640, height: 480 });
+    const gif = Buffer.alloc(14); gif.write('GIF89a', 0, 'ascii'); gif.writeUInt16LE(120, 6); gif.writeUInt16LE(90, 8);
+    expect(imageSize(gif)).toEqual({ width: 120, height: 90 });
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x01, 0x2c, 0x01, 0x90, 0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01]);
+    expect(imageSize(jpeg)).toEqual({ width: 400, height: 300 });
+    expect(imageSize(Buffer.from('not an image at all, nothing to see'))).toBeNull();
+  });
+  it('finds the right tile for a coordinate', () => {
+    const t = tileFor(52.3987, 0.2635, 8);
+    expect(t).toMatchObject({ x: 128, y: 84 });
+  });
+});

@@ -21,7 +21,9 @@ const WEIGHTS = {
 } as const;
 const weightOf = (f: GeneratedFragment) => WEIGHTS[f.weight ?? 2];
 /** Characters per line for this card's text, from its width and font size (Neue Montreal Light is about 0.45 em wide). */
-const charsPerLine = (f: GeneratedFragment) => Math.floor((weightOf(f).width - 2 * CARD_PAD) / (weightOf(f).body * 0.47));
+/** A quotation is set large in the display face (Denton Condensed is narrow), everything else in the text size. */
+const bodyPx = (f: GeneratedFragment) => weightOf(f).body + (f.type === 'quote' ? 6 : 0);
+const charsPerLine = (f: GeneratedFragment) => Math.floor((weightOf(f).width - 2 * CARD_PAD) / (bodyPx(f) * (f.type === 'quote' ? 0.34 : 0.47)));
 
 export const groupFor = (cardId: string) => `grp-${cardId}`;
 export const titleId = (cardId: string) => `${cardId}-title`;
@@ -63,7 +65,9 @@ export function cardLook(f: GeneratedFragment): CardLook {
     backgroundColor: cssVar('--color-card-bg', '#101010'),
     // A hairline, never a coloured outline: a card is outlined only while it is selected. Where it came from is in its footer.
     stroke: { strokeColor: cssVar('--color-card-border', '#1B1B1B'), strokeWidth: 1 },
-    body: { text: `\n\n${parts.join('\n\n')}`, fontSize: w.body, strokeColor: cssVar(w.bodyColor[0], w.bodyColor[1]), fontFamily: 8, textAlign: 'left', verticalAlign: 'top' },
+    body: f.type === 'quote'
+      ? { text: `\n\n${parts.join('\n\n')}`, fontSize: bodyPx(f), strokeColor: cssVar(w.titleColor[0], w.titleColor[1]), fontFamily: 7, textAlign: 'left', verticalAlign: 'top' }
+      : { text: `\n\n${parts.join('\n\n')}`, fontSize: w.body, strokeColor: cssVar(w.bodyColor[0], w.bodyColor[1]), fontFamily: 8, textAlign: 'left', verticalAlign: 'top' },
     title: { text: clip(f.title, 40), fontSize: w.title, fontFamily: 6, strokeColor: cssVar(w.titleColor[0], w.titleColor[1]) },
     foot: { text: cardFooter(f), fontSize: 10, fontFamily: 2, strokeColor: cssVar('--color-card-foot', '#5B5B60') },
   };
@@ -74,7 +78,7 @@ type Box = { x: number; y: number; width: number; height: number };
 /** The box a card needs for its text: width from its weight, height from the number of lines (never less than FRAG_H). */
 export function cardSize(f: GeneratedFragment): { width: number; height: number } {
   const lines = cardLook(f).body.text.split('\n').length;
-  return { width: weightOf(f).width, height: Math.max(FRAG_H, Math.ceil(lines * weightOf(f).body * 1.25 + 8 + FOOT_AREA)) };
+  return { width: weightOf(f).width, height: Math.max(FRAG_H, Math.ceil(lines * bodyPx(f) * 1.25 + 8 + FOOT_AREA)) };
 }
 
 /** Skeletons for the two free texts of a card at `box` (the layout builds these along with the box). */

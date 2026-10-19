@@ -161,7 +161,7 @@ export function dropOrphanPictures(elements: El[]): El[] {
   const live = new Set(elements.filter(e => !e.isDeleted).map(e => e.id as string));
   let out = elements;
   for (const e of elements) {
-    const m = /^wimg-(\d+)-(\d+)$/.exec(e.id);
+    const m = /^wimg-(\d+)-(\d+)(?:-\d+)?$/.exec(e.id) ?? /^dmedia-frag-(\d+)-(\d+)-/.exec(e.id);
     if (m && !e.isDeleted && !live.has(`frag-${m[1]}-${m[2]}`)) out = removeBox(out, e.id);
   }
   return out;

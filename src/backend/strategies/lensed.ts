@@ -172,34 +172,48 @@ async function* kbWeb(ctx: Parameters<Strategy>[0], q: string, retrieval: Awaite
   else yield* kbCards(ctx, q, retrieval, marks);
 }
 
-/** One picture per article, from its lead image, for the first (heaviest) card that came from it. Three at a time. */
+/**
+ * What an article adds beyond its text, fetched alongside the cards, never in front of them: its lead picture, then (from
+ * the heaviest card that came from it) a couple more pictures that fit the passage, a map when it is about a place, and a
+ * clip as a link. Three articles at a time, with a budget so a web does not drown in pictures.
+ */
 async function* pictures(ctx: Parameters<Strategy>[0], collections: Collection[], marks: Marks): AsyncGenerator<WebEvent> {
   const fetchImage = ctx.images!;
-  const chosen = new Map<string, { cluster: number; slot: number; urlBase: string; title: string; weight: number }>();
+  const chosen = new Map<string, { cluster: number; slot: number; urlBase: string; title: string; weight: number; text: string }>();
   collections.forEach((c, ci) => c.passages.forEach((p, pi) => {
     const a = marks.article(p);
     if (!a) return;
     const weight = p.score.value;
     const key = `${a.urlBase}${a.title}`;
-    if (!chosen.has(key) || weight > chosen.get(key)!.weight) chosen.set(key, { cluster: ci, slot: pi, ...a, weight });
+    if (!chosen.has(key) || weight > chosen.get(key)!.weight) chosen.set(key, { cluster: ci, slot: pi, ...a, weight, text: p.text });
   }));
-  const jobs = [...chosen.values()];
-  const running = new Map<number, Promise<{ i: number; ev: WebEvent | null }>>();
+  const budget = { extras: 6, maps: 2, links: 2 };
+  const jobs = [...chosen.values()].sort((a, b) => b.weight - a.weight);
+  const work = async (job: (typeof jobs)[number]): Promise<WebEvent[]> => {
+    const out: WebEvent[] = [];
+    const lead = await fetchImage(job.urlBase, job.title, ctx.signal).catch(() => null);
+    if (lead) out.push({ type: 'image', cluster: job.cluster, slot: job.slot, image: { ...lead, kind: 'lead', n: 0 } });
+    if (ctx.media) {
+      const more = await ctx.media(job.urlBase, job.title, job.text, ctx.signal).catch(() => null);
+      for (const img of more?.extras ?? []) if (budget.extras > 0) { budget.extras--; out.push({ type: 'image', cluster: job.cluster, slot: job.slot, image: img }); }
+      if (more?.map && budget.maps > 0) { budget.maps--; out.push({ type: 'image', cluster: job.cluster, slot: job.slot, image: more.map }); }
+      for (const link of more?.links ?? []) if (budget.links > 0) { budget.links--; out.push({ type: 'media-link', cluster: job.cluster, slot: job.slot, link }); }
+    }
+    return out;
+  };
+  const running = new Map<number, Promise<{ i: number; events: WebEvent[] }>>();
   let next = 0;
   const launch = () => {
     while (running.size < 3 && next < jobs.length) {
-      const i = next++, job = jobs[i];
-      running.set(i, fetchImage(job.urlBase, job.title, ctx.signal).then(
-        (image): { i: number; ev: WebEvent | null } => ({ i, ev: image ? { type: 'image', cluster: job.cluster, slot: job.slot, image } : null }),
-        (): { i: number; ev: WebEvent | null } => ({ i, ev: null }), // a picture that can't be fetched is simply absent
-      ));
+      const i = next++;
+      running.set(i, work(jobs[i]).then(events => ({ i, events }), () => ({ i, events: [] as WebEvent[] }))); // a picture that can't be fetched is simply absent
     }
   };
   launch();
   while (running.size) {
-    const { i, ev } = await Promise.race(running.values());
+    const { i, events } = await Promise.race(running.values());
     running.delete(i);
-    if (ev) yield ev;
+    yield* events;
     launch();
   }
 }

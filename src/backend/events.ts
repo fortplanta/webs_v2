@@ -4,7 +4,7 @@
 
 import type { FragmentType } from '../types/fragments';
 import type { WebsErrorCode } from './errors';
-import type { WebImage } from './library/images';
+import type { MediaLink, WebImage } from './library/images';
 
 export interface KbPassage {
   source: string; // path relative to the KB dir
@@ -75,6 +75,8 @@ export type WebEvent =
   | { type: 'ai-outline'; start: number; context: string; clusters: Array<{ title: string; slots: number; edge?: string }>; edges: OverviewEdge[]; model: string }
   /** A picture for the card at (cluster, slot), fetched in the background; the canvas places it beside the card. */
   | { type: 'image'; cluster: number; slot: number; image: WebImage }
+  /** A video or audio clip from the card's article, as a link card. */
+  | { type: 'media-link'; cluster: number; slot: number; link: MediaLink }
   /** Something went wrong with an optional part (e.g. the AI top-up); the web carries on without it. */
   | { type: 'warning'; message: string }
   | { type: 'done' }

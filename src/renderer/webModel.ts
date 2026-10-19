@@ -50,6 +50,7 @@ export function reduce(m: WebModel, ev: WebEvent): WebModel {
     case 'warning':
       return { ...m, warning: ev.message };
     case 'image':
+    case 'media-link':
       return m; // pictures go straight onto the canvas (see CanvasView), not into the saved model
     case 'fragment': {
       const clusters = m.clusters.map((c, i) =>

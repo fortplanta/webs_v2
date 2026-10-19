@@ -14,6 +14,8 @@ import { FlowOverlay } from './FlowOverlay';
 import { PopMenu, type PopItem } from './PopMenu';
 import { SelectionBar, type BarActions } from './SelectionBar';
 import { branchSpot, connectionSeed } from './branch';
+import { BUDGET, clipCard, planDerived, quoteCard, sourceText } from './derived';
+import { drawFacts, drawMap, drawTimeline } from './infographic';
 import { cutTargets, DRAG_PX, modeFor, type GestureMode } from './gesture';
 import { IconBranch, IconCut, IconEdit, IconExplore, IconLink, IconLens, IconPlus } from './icons';
 import type { TimelineCard } from './timeline';
@@ -48,7 +50,7 @@ interface Props {
   /** Lets the command palette ask the canvas for its commands (add, zoom, jump to a card…). */
   registerCommands?: (provider: (() => Command[]) | null) => void;
   /** Lets the generation hand pictures to the canvas as they are fetched. */
-  registerImageSink?: (sink: ((ev: Extract<WebEvent, { type: 'image' }>) => void) | null) => void;
+  registerImageSink?: (sink: ((ev: Extract<WebEvent, { type: 'image' | 'media-link' }>) => void) | null) => void;
 }
 
 type Editing =
@@ -573,7 +575,12 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
         break;
       }
       case 'card': replaceFragment(`${prefix}-c${ev.slot}`, ev.fragment); break;
-      case 'done': setPivot(null); cancelPivot.current = null; break;
+      case 'done': {
+        setPivot(null); cancelPivot.current = null;
+        const fresh = new Set(scene().filter(e => !e.isDeleted && e.id.startsWith(`${prefix}-c`) && e.customData?.kind === 'fragment').map(e => e.id));
+        if (fresh.size) addDerivedMedia(fresh); // companions for the new cards
+        break;
+      }
       case 'error': setPivot(null); cancelPivot.current = null; say('error', ev.message); break;
     }
   }
@@ -792,25 +799,94 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     } finally { setLensing(null); }
   }
 
-  /** A picture fetched for a library card: saved with the web, placed beside its card on the side away from the middle, and tethered to it. */
+  /**
+   * Pictures fetched for a library card: saved with the web, placed beside their card on the side away from the middle,
+   * and tethered to it. Besides the lead picture there can be a couple more from the article and a map of the place
+   * (drawn onto the canvas's dark look, the place marked, the credit on it).
+   */
   const pictureQueue = useRef<Promise<void>>(Promise.resolve());
+  const PICTURE_COL = (card: El) => (card.x + card.width / 2 >= 0 ? card.x + card.width + 28 : card.x - 28);
+
+  /** Put an image (already a data URL) on the canvas as a card tethered to `parent`, in free space on its outward side. */
+  async function placeImageCard(parent: El, id: string, img: { dataURL: string; mimeType: string; width: number; height: number; caption: string; link?: string }, maxSide: number) {
+    const blob = dataUrlToBlob(img.dataURL);
+    const fileId = await contentId(blob);
+    api!.addFiles([{ id: fileId as BinaryFileData['id'], mimeType: img.mimeType as BinaryFileData['mimeType'], dataURL: img.dataURL as BinaryFileData['dataURL'], created: Date.now() }]);
+    const lay = imageCardLayout(img.width, img.height, maxSide);
+    const right = parent.x + parent.width / 2 >= 0;
+    const at = findFreeSpot(scene(), { x: right ? PICTURE_COL(parent) : PICTURE_COL(parent) - lay.width, y: parent.y }, lay.width, lay.height);
+    const placed = addImageCard(scene(), { id, x: at.x, y: at.y, maxSide, data: { fileId, caption: img.caption, name: img.caption, width: img.width, height: img.height, link: img.link } }, build, makeImage);
+    apply(addTether(placed.elements, parent.id, id, makeArrow, 640));
+  }
+
   function placePicture(ev: Extract<WebEvent, { type: 'image' }>) {
     pictureQueue.current = pictureQueue.current.then(async () => {
       if (!api) return;
-      const card = byId(`frag-${ev.cluster}-${ev.slot}`), id = `wimg-${ev.cluster}-${ev.slot}`;
-      if (!card || byId(id)) return; // the card was set aside or deleted, or already has its picture
-      const { image } = ev;
-      const blob = dataUrlToBlob(image.dataURL);
-      const fileId = await contentId(blob);
-      api.addFiles([{ id: fileId as BinaryFileData['id'], mimeType: image.mimeType as BinaryFileData['mimeType'], dataURL: image.dataURL as BinaryFileData['dataURL'], created: Date.now() }]);
-      const lay = imageCardLayout(image.width, image.height, PICTURE_SIDE);
-      const x = card.x + card.width / 2 >= 0 ? card.x + card.width + 28 : card.x - lay.width - 28;
-      const placed = addImageCard(scene(), { id, x, y: card.y, maxSide: PICTURE_SIDE, data: { fileId, caption: image.caption, name: image.caption, width: image.width, height: image.height, link: image.link } }, build, makeImage);
-      apply(addTether(placed.elements, card.id, id, makeArrow, 560));
+      const n = ev.image.n ?? 0;
+      const card = byId(`frag-${ev.cluster}-${ev.slot}`), id = n === 0 ? `wimg-${ev.cluster}-${ev.slot}` : `wimg-${ev.cluster}-${ev.slot}-${n}`;
+      if (!card || byId(id)) return; // the card was set aside or deleted, or already has this picture
+      let image = ev.image;
+      if (image.kind === 'map' && image.marker) image = { ...image, ...(await drawMap(image.dataURL, image.marker)) };
+      const caption = image.credit ? `${image.caption} · ${image.credit}` : image.caption;
+      await placeImageCard(card, id, { ...image, caption }, n === 0 ? PICTURE_SIDE : image.kind === 'map' ? 240 : 260);
     }).catch(err => { console.warn('Could not place a picture:', err); /* it is simply absent */ });
   }
-  const placeRef = useRef(placePicture);
-  placeRef.current = placePicture;
+
+  /** A clip from the card's article, as a card that opens it on Commons. */
+  function placeClip(ev: Extract<WebEvent, { type: 'media-link' }>) {
+    pictureQueue.current = pictureQueue.current.then(() => {
+      if (!api) return;
+      const parent = byId(`frag-${ev.cluster}-${ev.slot}`), id = `dclip-${ev.cluster}-${ev.slot}`;
+      if (!parent || byId(id)) return;
+      const fragment = clipCard(ev.link);
+      const size = cardSize(fragment);
+      const at = findFreeSpot(scene(), { x: parent.x + parent.width / 2 >= 0 ? PICTURE_COL(parent) : PICTURE_COL(parent) - size.width, y: parent.y }, size.width, size.height);
+      apply(addTether(addCard(scene(), { id, x: at.x, y: at.y, fragment, customData: { kind: 'fragment', fragment } }, build), parent.id, id, makeArrow, 640));
+    }).catch(err => console.warn('Could not place a clip:', err));
+  }
+
+  /**
+   * Companions for source-based cards, lifted from their own text: a figures card or a timeline picture, and a quotation
+   * set large. Within a budget, heaviest cards first, once per card (see derived.ts).
+   */
+  const derivedDone = useRef(new Set<string>());
+  function addDerivedMedia(onlyIds?: ReadonlySet<string>) {
+    pictureQueue.current = pictureQueue.current.then(async () => {
+      if (!api) return;
+      const live = scene().filter(e => !e.isDeleted);
+      let infographics = live.filter(e => /^dmedia-.*-(facts|timeline)$/.test(e.id)).length, quotes = live.filter(e => /^dquote-/.test(e.id)).length;
+      const cards = live.filter(e => e.type === 'rectangle' && e.customData?.kind === 'fragment' && (!onlyIds || onlyIds.has(e.id)) && !derivedDone.current.has(e.id))
+        .sort((a, b) => (b.customData.fragment?.weight ?? 2) - (a.customData.fragment?.weight ?? 2));
+      for (const card of cards) {
+        derivedDone.current.add(card.id);
+        const f: GeneratedFragment = card.customData.fragment;
+        for (const d of planDerived(f)) {
+          if (d.kind === 'quote') {
+            const id = `dquote-${card.id}`;
+            if (quotes >= BUDGET.quotes || byId(id)) continue;
+            quotes++;
+            const qf = quoteCard(f, d.quote), size = cardSize(qf);
+            const at = findFreeSpot(scene(), { x: card.x + card.width / 2 >= 0 ? PICTURE_COL(card) : PICTURE_COL(card) - size.width, y: card.y }, size.width, size.height);
+            apply(addTether(addCard(scene(), { id, x: at.x, y: at.y, fragment: qf, customData: { kind: 'fragment', fragment: qf } }, build), card.id, id, makeArrow, 640));
+            continue;
+          }
+          const id = `dmedia-${card.id}-${d.kind}`;
+          if (infographics >= BUDGET.infographics || byId(id)) continue;
+          infographics++;
+          const img = d.kind === 'facts' ? await drawFacts(d.facts) : await drawTimeline(d.entries);
+          const label = d.kind === 'facts' ? 'Key figures' : 'Timeline';
+          await placeImageCard(card, id, { ...img, caption: `${label}: ${f.title}`, link: f.link }, d.kind === 'facts' ? 330 : 460);
+        }
+      }
+    }).catch(err => console.warn('Could not add companions:', err));
+  }
+  // a freshly written web gets its companions once it is complete (reopening a saved one never adds any)
+  useEffect(() => {
+    if (api && !restored && model.phase === 'done') addDerivedMedia();
+  }, [api, restored, model.phase]);
+
+  const placeRef = useRef<(ev: Extract<WebEvent, { type: 'image' | 'media-link' }>) => void>(() => undefined);
+  placeRef.current = ev => (ev.type === 'image' ? placePicture(ev) : placeClip(ev));
   useEffect(() => {
     registerImageSink?.(ev => placeRef.current(ev));
     return () => registerImageSink?.(null);
