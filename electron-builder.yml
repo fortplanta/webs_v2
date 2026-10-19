@@ -19,6 +19,9 @@ extraResources:
     to: kb-sample
     filter:
       - "**/*.md"
+  # The companion's skills and the one global voice every action is run through: plain files read at run time.
+  - from: skills
+    to: skills
 
 asar: true
 

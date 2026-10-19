@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "modes": {
+    "shift":           { "title": "Challenge", "tagline": "Is it any good?",            "skills": ["devils-advocate", "assumption-audit", "anti-pattern", "bounce-idea", "analyze"] },
+    "command":         { "title": "Understand", "tagline": "What's really going on?",   "skills": ["explain-clarify", "map-system", "synthesis", "deep-research", "competitive-landscape", "jtbd"] },
+    "control":         { "title": "Decide", "tagline": "What do I do about it?",        "skills": ["bottleneck", "options-theory", "paradox", "game-theory", "feedback-loops"] },
+    "shift+command":   { "title": "Diagnose", "tagline": "Discover and diagnose",       "cascade": "discover-diagnose" },
+    "command+control": { "title": "Design", "tagline": "Decide and design",             "cascade": "decide-design" },
+    "shift+control":   { "title": "Keep", "tagline": "Save it without running it",      "keeps": ["send-to-webs", "new-web", "copy-with-source", "quote-card"] },
+    "shift+command+control": { "title": "Everything", "tagline": "Discover to design, start to finish", "cascade": "discover-design" }
+  },
+  "cascades": {
+    "discover-diagnose": {
+      "name": "Discover & diagnose",
+      "runs": ["situation", "system", "patterns", "diagnosis"],
+      "show": ["situation", "system", "patterns", "diagnosis"],
+      "wheel": [
+        { "id": "all",       "label": "Full diagnosis",     "show": ["situation", "system", "patterns", "diagnosis"] },
+        { "id": "situation", "label": "Situation card",     "show": ["situation"] },
+        { "id": "system",    "label": "System snapshot",    "show": ["system"] },
+        { "id": "patterns",  "label": "Pattern table",      "show": ["patterns"] },
+        { "id": "diagnosis", "label": "Bottleneck & path",  "show": ["diagnosis"] }
+      ]
+    },
+    "decide-design": {
+      "name": "Decide & design",
+      "runs": ["situation", "system", "patterns", "diagnosis", "decision-brief", "options", "assumptions", "loops", "package"],
+      "wheel": [
+        { "id": "all",         "label": "Full decision package", "show": ["decision-brief", "options", "assumptions", "loops", "package"] },
+        { "id": "brief",       "label": "Decision brief",        "show": ["decision-brief"] },
+        { "id": "options",     "label": "Options table",         "show": ["options"] },
+        { "id": "assumptions", "label": "Assumptions & risks",   "show": ["assumptions"] },
+        { "id": "loops",       "label": "Choice & loops",        "show": ["loops"] }
+      ]
+    },
+    "discover-design": {
+      "name": "Discover to design",
+      "runs": ["situation", "system", "patterns", "diagnosis", "decision-brief", "options", "assumptions", "loops", "package"],
+      "wheel": [
+        { "id": "all",     "label": "The whole machine",  "show": ["situation", "system", "patterns", "diagnosis", "decision-brief", "options", "assumptions", "loops", "package"] },
+        { "id": "package", "label": "Decision package only", "show": ["package"] },
+        { "id": "short",   "label": "Diagnosis + decision",  "show": ["diagnosis", "decision-brief", "package"] }
+      ]
+    }
+  },
+  "keeps": {
+    "send-to-webs":     { "label": "Send to Webs",       "hint": "Save the selection to your inbox, no analysis" },
+    "new-web":          { "label": "New web from this",  "hint": "Start a web with this as the question" },
+    "copy-with-source": { "label": "Copy with source",   "hint": "The text and where it came from" },
+    "quote-card":       { "label": "Quote card",         "hint": "Save it as a quote, verbatim" }
+  }
+}
