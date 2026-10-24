@@ -76,6 +76,7 @@ async function withLibraries<T>(fn: (open: Array<{ db: LibraryDb; meta: LibraryM
 function aboutQuery(open: Array<{ db: LibraryDb; meta: LibraryMeta }>, query: string) {
   const entries = open.flatMap(({ db, meta }) => db.search(query, CANDIDATES).map(h => ({
     id: passageKey(meta.name, h.title, h.seq, h.id), source: `${meta.name}:${h.title}`, module: meta.name, heading: h.heading, text: h.text,
+    ...(h.exactTitle ? { exact: true } : {}),
   })));
   if (!entries.length) return [];
   const want = [...new Set(terms(query))];
@@ -91,12 +92,33 @@ function aboutQuery(open: Array<{ db: LibraryDb; meta: LibraryMeta }>, query: st
   });
 }
 
+/**
+ * The article whose title is the question ("Printing press" for "the printing press") is the best place to start, and its
+ * opening passage is its summary. Selection prefers short, tightly matching passages from side articles, so make sure that
+ * lead is in the first collection however the scores fell.
+ */
+export function withPrimaryLeads(r: Retrieval, entries: ReadonlyArray<{ id: string; source: string; heading: string; text: string; exact?: boolean }>, perCollection: number): Retrieval {
+  const have = new Set(r.collections.flatMap(c => c.passages.map(p => p.id)));
+  const titles = new Set<string>();
+  const missing = entries.filter(e => e.exact && e.id.endsWith('#0') && !have.has(e.id)).filter(e => {
+    const title = e.source.slice(e.source.indexOf(':') + 1).toLowerCase();
+    return titles.has(title) ? false : (titles.add(title), true);
+  }).slice(0, 2);
+  if (!missing.length) return r;
+  const top = Math.max(1, ...r.collections.flatMap(c => c.passages.map(p => p.score.value)));
+  const lead = (e: (typeof missing)[number]) => ({ id: e.id, source: e.source, text: e.text, heading: e.heading, lens: 'direct', terms: [...new Set(terms(`${e.heading} ${e.text}`))], score: { value: top, rel: 1, conn: 0, nov: 1, red: 0 } });
+  const collections = r.collections.map(c => ({ ...c, passages: [...c.passages] }));
+  if (!collections.length) collections.push({ lens: 'direct', label: 'The thing itself', verb: 'led to', passages: [] });
+  collections[0].passages = [...missing.map(lead), ...collections[0].passages].slice(0, Math.max(perCollection, missing.length));
+  return { ...r, collections };
+}
+
 export const libraryRetriever: LibraryRetriever = {
   retrieve: query => withLibraries((open, generation) => {
     const about = aboutQuery(open, query);
     if (!about.length) return null;
     const cfg: RetrieveConfig = { ...defaultRetrieveConfig, clusterCount: generation.clusterCount, fragmentsPerCluster: generation.fragmentsPerCluster, minCoverage: 0 };
-    return { retrieval: retrieve(PassageIndex.fromEntries(about), query, cfg), libraries: new Map(open.map(o => [o.meta.name, o.meta])) };
+    return { retrieval: withPrimaryLeads(retrieve(PassageIndex.fromEntries(about), query, cfg), about, generation.fragmentsPerCluster), libraries: new Map(open.map(o => [o.meta.name, o.meta])) };
   }),
 
   // The card's subject searched for in the libraries, then run through the same routes and bridges as a typed question,

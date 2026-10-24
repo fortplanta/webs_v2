@@ -28,10 +28,14 @@ export interface LibraryHit {
   /** Position within its article: 0 is the opening passage. */
   seq: number;
   text: string;
+  /** The article's title is the question itself ("Printing press" for "the printing press"). */
+  exactTitle?: boolean;
 }
 
 /** A word found in at least this many passages is "common": counting stops there (it keeps lookups fast in a library of millions). */
-const COMMON_WORD = 150_000;
+const COMMON_WORD = 60_000;
+/** Searches matching fewer passages than this are ranked by BM25; bigger ones are too slow to rank. */
+const RANKABLE = 4_000;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -136,28 +140,47 @@ export class LibraryDb {
   }
 
   /**
-   * The best-matching passages, ranked by BM25 (title matches count most). Passages with *every* word in their title come
-   * first, then passages with every word anywhere; if that gives too few, passages with some of the words fill up the
-   * list, using only the distinctive words (a word found in most of a huge library would drag in the world and take
-   * forever to rank).
+   * The best-matching passages. An article called exactly what was asked about comes first; then articles with every word in
+   * their title; then passages with every word. How long a search takes depends on how many passages *match*, because ranking
+   * by BM25 scores every match: "confirmation bias" matches a few thousand and answers in under a second, while "confirmation"
+   * alone matches a million and takes over a minute. So a one-word query for a common word is not ranked (the exact-title
+   * article and a first batch of title matches are all that vague a question can honestly give), and the fall-back that widens
+   * to "some of the words" is only used when it stays small.
    */
   search(query: string, limit = 300): LibraryHit[] {
     type Row = { id: number; title: string; heading: string; seq: number; z: Uint8Array };
     const words = [...new Set(contentWords(query))].slice(0, 12).map(w => w.replace(/"/g, '')).filter(Boolean);
     if (!words.length) return [];
-    const run = (q: string, n: number) => this.db.prepare(
-      `SELECT p.id, p.title, p.heading, p.seq, p.z FROM fts JOIN passage p ON p.id = fts.rowid WHERE fts MATCH ? ORDER BY bm25(fts, 6.0, 2.0, 1.0) LIMIT ?`,
+    const sql = (q: string, n: number, ranked: boolean) => this.db.prepare(
+      `SELECT p.id, p.title, p.heading, p.seq, p.z FROM fts JOIN passage p ON p.id = fts.rowid WHERE fts MATCH ? ${ranked ? 'ORDER BY bm25(fts, 6.0, 2.0, 1.0)' : ''} LIMIT ?`,
     ).all(q, n) as Row[];
+    /** Few enough matches to rank them all? (counting is cheap, ranking is not) */
+    const small = (q: string) => (this.db.prepare('SELECT count(*) AS n FROM (SELECT 1 FROM fts WHERE fts MATCH ? LIMIT ?)').get(q, RANKABLE) as { n: number }).n < RANKABLE;
+    const run = (q: string, n: number) => sql(q, n, small(q));
     const out: Row[] = [], seen = new Set<number>();
     const add = (rows: Row[]) => { for (const r of rows) if (out.length < limit && !seen.has(r.id)) { seen.add(r.id); out.push(r); } };
     const quoted = words.map(w => `"${w}"`);
+    const asked = new Set(words);
+    const isExact = (title: string) => { const t = new Set(contentWords(title)); return t.size === asked.size && [...asked].every(w => t.has(w)); };
+
+    // 1. an article called exactly this, then 2. articles with every word in their title (title column only: small lists)
+    const exact = run(`title : "${words.join(" ")}"`, 60).filter(r => isExact(r.title)).sort((a, b) => a.seq - b.seq);
+    add(exact);
     add(run(`title : (${quoted.join(' AND ')})`, limit));
-    if (out.length < limit) add(run(quoted.join(' AND '), limit));
+
+    // 3. every word in the passage, when that is a list short enough to rank
+    if (out.length < limit) {
+      const q = quoted.join(' AND ');
+      if (small(q)) add(sql(q, limit, true));
+    }
+    // 4. too few: some of the distinctive words, again only when that stays small
     if (out.length < Math.min(limit, 60)) {
       const distinctive = quoted.filter((_, i) => this.docFreq(words[i]) < COMMON_WORD);
-      if (distinctive.length) add(run(distinctive.join(' OR '), limit));
+      if (distinctive.length >= 2) { const q = distinctive.join(' OR '); if (small(q)) add(sql(q, limit, true)); }
     }
-    return out.map(r => ({ id: r.id, title: r.title, heading: r.heading, seq: r.seq, text: zlib.inflateRawSync(r.z).toString('utf8') }));
+
+    const exactIds = new Set(exact.map(r => r.id));
+    return out.map(r => ({ id: r.id, title: r.title, heading: r.heading, seq: r.seq, text: zlib.inflateRawSync(r.z).toString('utf8'), ...(exactIds.has(r.id) ? { exactTitle: true } : {}) }));
   }
 
   /** How many passages contain `word` (stemmed like the index), counted only up to COMMON_WORD: past that it is just "common". */

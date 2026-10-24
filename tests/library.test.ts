@@ -56,6 +56,15 @@ describe('library import and search', () => {
     lib.close();
   });
 
+  it('puts the article named exactly what was asked first and flags it', () => {
+    const lib = LibraryDb.open(out);
+    const hits = lib.search('the zeppelin');
+    expect(hits[0]).toMatchObject({ title: 'Zeppelin', exactTitle: true });
+    expect(hits.filter(h => h.exactTitle).every(h => h.title === 'Zeppelin')).toBe(true);
+    expect(lib.search('fish cat').some(h => h.exactTitle)).toBe(false);
+    lib.close();
+  });
+
   it('puts passages with every query word ahead of ones with only some', () => {
     const lib = LibraryDb.open(out);
     const hits = lib.search('fish cat');           // 'Fish & chips' and 'Cats' each match one word, none match both
@@ -77,7 +86,7 @@ describe('library import and search', () => {
 });
 
 // ── the library tier in the strategy ────────────────────────────────────────────────────────────────────────
-import { libraryRetriever, listLibraries, passageKey } from '../src/backend/library/service';
+import { libraryRetriever, listLibraries, passageKey, withPrimaryLeads } from '../src/backend/library/service';
 import { setSettingsOverrides } from '../src/backend/settings';
 import { runStrategy } from '../src/backend/strategies';
 import type { WebEvent } from '../src/backend/events';
@@ -98,6 +107,14 @@ describe('library tier', () => {
   const none: Retriever = { retrieve: async q => ({ query: q, terms: [], collections: [], considered: 0 }), retrieveFromCard: async () => ({ query: '', terms: [], collections: [], considered: 0 }) };
   const offline: LlmService = { call: async () => { const { WebsError } = await import('../src/backend/errors'); throw new WebsError('ollama-offline', 'offline'); }, async *stream() { /* none */ } };
   const collect = async (it: AsyncGenerator<WebEvent>) => { const out: WebEvent[] = []; for await (const e of it) out.push(e); return out; };
+
+  it('adds the exact-title lead to the first collection once, even if two libraries have it', () => {
+    const e = (src: string, id: string) => ({ id, source: src, heading: '', text: 'Lead text.', exact: true });
+    const r = { query: 'q', terms: [], considered: 0, collections: [{ lens: 'direct', label: 'x', verb: 'led to', passages: [{ id: 'a:Other#7', source: 'a:Other', text: 't', heading: '', lens: 'direct', terms: [], score: { value: 2, rel: 1, conn: 0, nov: 1, red: 0 } }] }] } as any;
+    const out = withPrimaryLeads(r, [e('a:Press', 'a:Press#0'), e('b:Press', 'b:Press#0')], 3);
+    expect(out.collections[0].passages.map((p: any) => p.id)).toEqual(['a:Press#0', 'a:Other#7']);
+    expect(withPrimaryLeads(out, [e('a:Press', 'a:Press#0')], 3)).toBe(out);
+  });
 
   it('lists libraries, skipping files that are not libraries', () => {
     expect(listLibraries(libDir)).toMatchObject([{ name: 'wiki', label: 'Test Wiki', articles: 2, passages: 3 }]);
