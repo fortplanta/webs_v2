@@ -2,6 +2,7 @@
 
 import type { GeneratedFragment } from '../backend/events';
 import type { InboxItem } from '../types/capture';
+import type { CompanionItem } from '../types/companion';
 import { clip, hostLabel, isHttpUrl } from './boxes';
 
 const MAX_BODY = 4000;
@@ -53,5 +54,17 @@ export function fragmentFromCapture(item: InboxItem): GeneratedFragment {
     body: clip(text, MAX_BODY),
     tags,
     ...(item.url ? { link: item.url } : {}),
+  };
+}
+
+/** A companion answer (or kept selection), filed onto the canvas. */
+export function fragmentFromCompanion(item: CompanionItem): GeneratedFragment {
+  const url = item.source?.url;
+  return {
+    type: url ? 'source' : 'concept',
+    title: clip(item.title, 80),
+    body: clip(item.body.replace(/^#{1,6}\s+/gm, '').trim(), MAX_BODY),
+    tags: ['companion', ...(item.action ? [item.action] : [])],
+    ...(url ? { link: url } : {}),
   };
 }

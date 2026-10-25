@@ -1,6 +1,7 @@
 import type { ConnectRequest, ConnectResult, LensRequest, LensResult, PivotEvent, PivotRequest, WebEvent } from '../backend/events';
 import type { WebModel } from './web';
 import type { CaptureTestResult, InboxResult } from './capture';
+import type { CompanionItem } from './companion';
 import type { AiTestResult, KbModuleInfo, OllamaModelsResult, SaveSettingsResult, SettingsBundle, SettingsPatch } from './settings';
 
 /** Excalidraw elements as stored; opaque to the backend. */
@@ -90,6 +91,10 @@ export interface WebsApi {
   /** Mark a capture as placed on the canvas (nodeId = the card's element id). */
   fileCapture(id: string, nodeId: string): Promise<{ ok: boolean; message?: string }>;
   dismissCapture(id: string): Promise<{ ok: boolean; message?: string }>;
+  /** Answers and kept selections from the Webs Companion, waiting to be placed. */
+  getCompanionInbox(): Promise<CompanionItem[]>;
+  /** Mark one as placed on the canvas, or dismissed. */
+  markCompanion(id: string, state: 'filed' | 'dismissed'): Promise<{ ok: boolean; message?: string }>;
   /** This app's version. */
   getVersion(): Promise<string>;
   /** Look for a newer release now. A found update also arrives through onUpdateState. */

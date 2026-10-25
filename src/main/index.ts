@@ -16,6 +16,7 @@ import { defaultSettings, getSettings, getSettingsOverrides, mergePatches, setSe
 import type { SaveSettingsResult, SettingsBundle, SettingsPatch } from '../types/settings';
 import { WebStore } from '../backend/db';
 import { runAction } from '../backend/companion/run';
+import { listCompanionInbox, markCompanion } from '../backend/companion/inbox';
 import { startCompanionServer, type CompanionServer } from '../backend/companion/server';
 
 import { migrateLegacyDb, seedKb } from '../backend/firstRun';
@@ -162,6 +163,8 @@ ipcMain.handle('update:open-page', () => openReleasePage());
 ipcMain.handle('capture:inbox', () => listInbox());
 ipcMain.handle('capture:file', (_e, id: string, nodeId: string) => markFiled(id, nodeId));
 ipcMain.handle('capture:dismiss', (_e, id: string) => markComposted(id));
+ipcMain.handle('companion:inbox', () => listCompanionInbox());
+ipcMain.handle('companion:mark', (_e, id: string, state: 'filed' | 'dismissed') => markCompanion(id, state === 'filed' ? 'filed' : 'dismissed'));
 ipcMain.handle('capture:test', (_e, url: string, token: string) => testCapture(url, token));
 
 let lastWarm = 0;

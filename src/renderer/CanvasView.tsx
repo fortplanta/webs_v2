@@ -4,6 +4,7 @@ import type { BinaryFileData, ExcalidrawImperativeAPI } from '@excalidraw/excali
 import '@excalidraw/excalidraw/index.css';
 import { LENS_CHOICES, type GeneratedFragment, type LensId, type PivotEvent, type WebEvent } from '../backend/events';
 import type { InboxItem } from '../types/capture';
+import type { CompanionItem } from '../types/companion';
 import type { SavedFile } from '../types/ipc';
 import { captionLabel, clusterLabel, edgeLabel, FRAG_H, FRAG_W, GAP, HEADER_H } from './boxes';
 import { BottomToolbar } from './BottomToolbar';
@@ -22,7 +23,7 @@ import { cutTargets, DRAG_PX, modeFor, type GestureMode } from './gesture';
 import { IconBranch, IconCut, IconEdit, IconExplore, IconLink, IconLens, IconPlus } from './icons';
 import type { TimelineCard } from './timeline';
 import { addCard, cardSize, updateCard } from './card';
-import { fragmentFromCapture, fragmentFromPaste, looksLikeExcalidrawClipboard } from './capture';
+import { fragmentFromCapture, fragmentFromCompanion, fragmentFromPaste, looksLikeExcalidrawClipboard } from './capture';
 import { ClusterEditor, ConnectPanel, EdgeEditor, FragmentEditor, ImageCardEditor, InboxPanel, type StickProps } from './Editors';
 import { hitTest } from './hit';
 import { useLiveLayout } from './layout/useLiveLayout';
@@ -83,6 +84,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   const [captureUrl, setCaptureUrl] = useState('');
   const [inbox, setInbox] = useState<InboxState>(emptyInbox);
   const [inboxOpen, setInboxOpen] = useState(false);
+  const [companionItems, setCompanionItems] = useState<CompanionItem[]>([]);
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
   const [pivot, setPivot] = useState<{ status: string } | null>(null);
   const [lensing, setLensing] = useState<string | null>(null);
@@ -722,6 +724,27 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     return () => clearInterval(t);
   }, [captureUrl]);
 
+  const refreshCompanion = () => window.webs.getCompanionInbox().then(setCompanionItems).catch(() => {});
+  useEffect(() => {
+    void refreshCompanion();
+    const t = setInterval(() => { void refreshCompanion(); }, 4000);
+    const onFocus = () => { void refreshCompanion(); };
+    window.addEventListener('focus', onFocus);
+    return () => { clearInterval(t); window.removeEventListener('focus', onFocus); };
+  }, []);
+
+  async function addCompanion(item: CompanionItem) {
+    if (!api) return;
+    newFragment(freeSpotInView(), undefined, fragmentFromCompanion(item), false);
+    setCompanionItems(l => l.filter(x => x.id !== item.id));
+    await window.webs.markCompanion(item.id, 'filed');
+  }
+
+  async function dismissCompanion(item: CompanionItem) {
+    setCompanionItems(l => l.filter(x => x.id !== item.id));
+    await window.webs.markCompanion(item.id, 'dismissed');
+  }
+
   async function addCapture(item: InboxItem) {
     if (!api) return;
     const id = newFragment(freeSpotInView(), undefined, fragmentFromCapture(item), false);
@@ -732,6 +755,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
 
   async function addAllCaptures() {
     for (const item of [...inbox.items]) await addCapture(item);
+    for (const item of [...companionItems]) await addCompanion(item);
   }
 
   async function dismissCapture(item: InboxItem) {
@@ -958,7 +982,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
         disabled={!api || view === 'timeline'}
         onFragment={addFreeFragment}
         onImage={() => fileInput.current?.click()}
-        inbox={captureUrl ? { count: inbox.items.length, open: inboxOpen, onToggle: () => { setInboxOpen(o => !o); void refreshInbox(); } } : undefined}
+        inbox={captureUrl || companionItems.length ? { count: inbox.items.length + companionItems.length, open: inboxOpen, onToggle: () => { setInboxOpen(o => !o); if (captureUrl) void refreshInbox(); void refreshCompanion(); } } : undefined}
         chips={[
           ...(sticking ? [{ text: 'Click the card or label it should stay near', action: { label: 'Cancel', run: () => setSticking(null) } }] : []),
           ...(connectFrom ? [{ text: 'Click the card to connect it to', action: { label: 'Cancel', run: () => setConnectFrom(null) } }] : []),
@@ -975,9 +999,10 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
 
       {menu && <PopMenu x={menu.x} y={menu.y} title={menu.title} items={menu.items} onClose={() => setMenu(null)} />}
 
-      {inboxOpen && captureUrl && (
+      {inboxOpen && (
         <InboxPanel
           items={inbox.items} unsupported={inbox.unsupported} error={inbox.error} busy={inbox.busy} serviceUrl={captureUrl}
+          companion={companionItems} onAddCompanion={addCompanion} onDismissCompanion={dismissCompanion}
           onAdd={addCapture} onAddAll={addAllCaptures} onDismiss={dismissCapture} onRefresh={refreshInbox} onClose={() => setInboxOpen(false)}
         />
       )}

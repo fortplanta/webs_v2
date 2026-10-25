@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { GeneratedFragment } from '../backend/events';
 import type { FragmentType } from '../types/fragments';
 import type { InboxItem } from '../types/capture';
+import type { CompanionItem } from '../types/companion';
 import { FRAGMENT_TYPES, hostLabel, isHttpUrl } from './boxes';
 import { formatBytes } from './images';
 import type { ImageCardData } from './imageCard';
@@ -196,12 +197,15 @@ const ago = (iso: string) => {
   return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
 };
 
-export function InboxPanel({ items, unsupported, error, busy, serviceUrl, onAdd, onAddAll, onDismiss, onRefresh, onClose }: {
+export function InboxPanel({ items, unsupported, error, busy, serviceUrl, companion = [], onAddCompanion, onDismissCompanion, onAdd, onAddAll, onDismiss, onRefresh, onClose }: {
   items: InboxItem[];
   unsupported: number;
   error: string | null;
   busy: boolean;
   serviceUrl: string;
+  companion?: CompanionItem[];
+  onAddCompanion?: (item: CompanionItem) => void;
+  onDismissCompanion?: (item: CompanionItem) => void;
   onAdd: (item: InboxItem) => void;
   onAddAll: () => void;
   onDismiss: (item: InboxItem) => void;
@@ -216,10 +220,29 @@ export function InboxPanel({ items, unsupported, error, busy, serviceUrl, onAdd,
       </div>
       <div className="inbox-actions">
         <button onClick={onRefresh} disabled={busy}>{busy ? 'Checking…' : 'Refresh'}</button>
-        <button onClick={onAddAll} disabled={busy || items.length === 0}>Add all ({items.length})</button>
+        <button onClick={onAddAll} disabled={busy || items.length + companion.length === 0}>Add all ({items.length + companion.length})</button>
       </div>
       {error && <div className="field-error" role="alert">{error}</div>}
-      {!error && items.length === 0 && !busy && <div className="hint">Nothing waiting. Captures from the browser extension and your phone show up here.</div>}
+      {!error && items.length === 0 && companion.length === 0 && !busy && <div className="hint">Nothing waiting. Captures from the browser extension and your phone, and answers from the Companion, show up here.</div>}
+      {companion.length > 0 && (
+        <>
+          <div className="meta">From the Companion</div>
+          <ul className="inbox-list">
+            {companion.map(item => (
+              <li key={item.id}>
+                <div className="inbox-title">{item.title}</div>
+                <div className="inbox-snippet">{item.body.replace(/^#{1,6}\s+/gm, '').slice(0, 220)}</div>
+                {item.selection && <div className="meta">on “{item.selection.replace(/\s+/g, ' ').slice(0, 60)}{item.selection.length > 60 ? '…' : ''}”</div>}
+                <div className="meta">{item.kind === 'kept' ? 'kept' : 'answer'} · {ago(item.at)}</div>
+                <div className="inbox-row">
+                  <button onClick={() => onAddCompanion?.(item)}>Add to canvas</button>
+                  <button className="plain-link" onClick={() => onDismissCompanion?.(item)}>Dismiss</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       <ul className="inbox-list">
         {items.map(item => (
           <li key={item.id}>
@@ -241,7 +264,7 @@ export function InboxPanel({ items, unsupported, error, busy, serviceUrl, onAdd,
           </li>
         ))}
       </ul>
-      {unsupported > 0 && (
+      {unsupported > 0 && serviceUrl && (
         <div className="hint">
           {unsupported} image/file capture{unsupported === 1 ? '' : 's'} can't be placed on the canvas yet. View {unsupported === 1 ? 'it' : 'them'} in the{' '}
           <a href={`${serviceUrl}/inbox/`} target="_blank" rel="noreferrer">capture inbox page</a>.

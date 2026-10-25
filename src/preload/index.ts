@@ -63,6 +63,8 @@ const api: WebsApi = {
     void ipcRenderer.invoke('update:state').then(cb);
     return () => { ipcRenderer.removeListener('update:state', handler); };
   },
+  getCompanionInbox: () => ipcRenderer.invoke('companion:inbox'),
+  markCompanion: (id, state) => ipcRenderer.invoke('companion:mark', id, state),
   testCapture: (url, token) => ipcRenderer.invoke('capture:test', url, token),
 };
 
