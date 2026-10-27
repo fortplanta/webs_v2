@@ -23,4 +23,6 @@ Earlier, in the spike: it proves the gesture. Choosing an option appends a line 
 sh build-app.sh && open "Webs Companion.app"
 ```
 
+Signing: run `sh sign-setup.sh` once (makes a local certificate; macOS asks for your password once), then `build-app.sh` signs every build the same way, so the permission below survives rebuilds. Without the certificate it falls back to an ad-hoc signature and the permission is lost on each rebuild.
+
 First run: allow it under System Settings → Privacy & Security → Accessibility (and Input Monitoring if asked), then quit and reopen it.

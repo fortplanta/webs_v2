@@ -24,5 +24,16 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
-codesign --force --sign - "$APP" 2>/dev/null || true
+# Sign with the same certificate every time: macOS ties the Accessibility / Input Monitoring permission to the signature, and an
+# ad-hoc one changes with every build (so the permission was lost on each rebuild). The certificate lives in its own keychain,
+# made once by sign-setup.sh.
+ID="Webs Companion Dev"
+KC="$HOME/Library/Keychains/webs-companion-signing.keychain-db"
+if [ -f "$KC" ] && security unlock-keychain -p "" "$KC" 2>/dev/null && security find-identity -p codesigning "$KC" | grep -q "\"$ID\""; then
+  codesign --force --sign "$ID" --keychain "$KC" --identifier app.webs.companion "$APP"
+  echo "Signed with \"$ID\""
+else
+  codesign --force --sign - "$APP" 2>/dev/null || true
+  echo "No \"$ID\" certificate (run companion/sign-setup.sh once): signed ad-hoc, so the key permission will need granting again after this build."
+fi
 echo "Built $APP"
