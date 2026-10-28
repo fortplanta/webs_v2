@@ -11,6 +11,18 @@ if CommandLine.arguments.contains("--print-wheels") {
     exit(0)
 }
 
+// `--self-test`: check the key-toggling rules without a drag
+if CommandLine.arguments.contains("--self-test") {
+    var failed = 0
+    func check(_ name: String, _ got: Set<Modifier>, _ want: Set<Modifier>) { if got != want { failed += 1; print("FAIL \(name): \(Modifier.key(got)) != \(Modifier.key(want))") } else { print("ok   \(name)") } }
+    check("⇧ then ⌘ → ⇧⌘", Modifier.toggled([.shift], [.command]), [.shift, .command])
+    check("⇧⌘ then ⇧ → ⌘", Modifier.toggled([.shift, .command], [.shift]), [.command])
+    check("⇧ then ⇧ → nothing (closes)", Modifier.toggled([.shift], [.shift]), [])
+    check("⌃ then ⇧⌘ together → all three", Modifier.toggled([.control], [.shift, .command]), [.shift, .command, .control])
+    check("⇧⌘⌃ then ⌘⌃ together → ⇧", Modifier.toggled([.shift, .command, .control], [.command, .control]), [.shift])
+    exit(failed == 0 ? 0 : 1)
+}
+
 // `--run-test <mode> <action> <text…>`: send one run to Webs and print what comes back (checks the whole path without a drag)
 if let i = CommandLine.arguments.firstIndex(of: "--run-test"), CommandLine.arguments.count > i + 3 {
     let mode = CommandLine.arguments[i + 1], action = CommandLine.arguments[i + 2], text = CommandLine.arguments[(i + 3)...].joined(separator: " ")

@@ -10,6 +10,9 @@ enum Modifier: String, CaseIterable {
 
     /// The name the catalog uses for a set of modifiers: always in the order shift, command, control.
     static func key(_ mods: Set<Modifier>) -> String { allCases.filter { mods.contains($0) }.map(\.rawValue).joined(separator: "+") }
+    /// With a wheel open, each key tapped flips that key in or out of the combination (⇧ open, tap ⌘ → ⇧⌘, tap ⇧ → ⌘), so one
+    /// drag can walk through every wheel. Taps that land together flip together. Nothing left means the wheel closes.
+    static func toggled(_ shown: Set<Modifier>, _ taps: Set<Modifier>) -> Set<Modifier> { shown.symmetricDifference(taps) }
     static func glyphs(_ mods: Set<Modifier>) -> String { allCases.filter { mods.contains($0) }.map(\.glyph).joined() }
 }
 

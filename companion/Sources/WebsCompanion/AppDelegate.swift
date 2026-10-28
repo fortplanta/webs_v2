@@ -6,7 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let monitor = GestureMonitor()
     private let panel = WheelPanel()
     private let toast = Toast()
-    private var statusLine = NSMenuItem(title: "Asleep. Drag text, then tap ⇧ ⌘ ⌃ (or two or three together)", action: nil, keyEquivalent: "")
+    private var statusLine = NSMenuItem(title: "Asleep. Drag text, tap ⇧ ⌘ ⌃ (tap more to switch)", action: nil, keyEquivalent: "")
     private var permissionLine = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private var lastDragSource: GestureMonitor.Dragging?
     private var catalog: Catalog?
@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         monitor.onHide = { [weak self] in
             self?.panel.hide()
-            self?.statusLine.title = "Asleep. Drag text, then tap ⇧ ⌘ ⌃ (or two or three together)"
+            self?.statusLine.title = "Asleep. Drag text, tap ⇧ ⌘ ⌃ (tap more to switch)"
         }
         panel.wheel.onChoose = { [weak self] spec, segment, text in self?.chosen(spec, segment, text) }
         monitor.onEscape = { [weak self] in self?.cancelRun() }

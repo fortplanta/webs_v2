@@ -9,6 +9,8 @@ until you drop: drop on a segment to choose it, in the middle (or press Escape) 
 | ⌘ Command | Explore | A different angle · What led to this · What follows · Who disagrees · Related reading |
 | ⌃ Control | Keep | Send to Webs · New web from this · Copy with source |
 
+**Switching wheels:** with a wheel open, tap ⇧, ⌘ or ⌃ again to toggle that key in or out of the combination, without dropping the drag. ⇧ opens Challenge, then tapping ⌘ gives ⇧⌘ (Diagnose), tapping ⇧ again gives ⌘ (Understand). Toggling off the last key closes the wheel and keeps the drag. Keys tapped together at the start open the combination directly. `WebsCompanion --self-test` checks the rules.
+
 Esc closes the wheel and keeps the drag (it swallows that one key press while the wheel is open); Esc during a run cancels it.
 
 Choosing an option sends the run to Webs, which wakes quietly in the background if it isn't running (no window, no Dock icon).

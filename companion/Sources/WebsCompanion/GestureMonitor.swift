@@ -24,9 +24,7 @@ final class GestureMonitor {
     private var pending: Set<Modifier> = []
     private var chordTimer: DispatchWorkItem?
     private var shownMods: Set<Modifier> = []
-    private var shownAt: Date = .distantPast
     static let chordWindow: TimeInterval = 0.12   // taps this close together are a chord
-    static let upgradeWindow: TimeInterval = 0.35 // a second key this soon after the wheel opened upgrades it to a chord
 
     func start() {
         let mask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseDragged, .leftMouseUp, .flagsChanged, .keyDown]
@@ -98,9 +96,10 @@ final class GestureMonitor {
     }
 
     private func noteTaps(_ taps: Set<Modifier>) {
-        // a key tapped right after the wheel opened turns it into a chord (a slower second finger)
-        if wheelOpen, Date().timeIntervalSince(shownAt) < Self.upgradeWindow, !taps.isSubset(of: shownMods) {
-            present(shownMods.union(taps))
+        // with the wheel open, a tap toggles that key: the wheel changes to the combination that results (and closes if none is left)
+        if wheelOpen {
+            let next = Modifier.toggled(shownMods, taps)
+            if next.isEmpty { Journal.trace("keys toggled off: wheel closed, drag kept"); close() } else { present(next) }
             return
         }
         pending.formUnion(taps)
@@ -118,15 +117,17 @@ final class GestureMonitor {
 
     private func present(_ mods: Set<Modifier>) {
         guard let d = dragging, !mods.isEmpty else { return }
+        let wasOpen = wheelOpen
         wheelOpen = true
-        shownMods = mods; shownAt = Date()
-        Journal.trace("keys tapped during text drag → \(Modifier.key(mods)) wheel")
+        shownMods = mods
+        Journal.trace("keys \(wasOpen ? "toggled" : "tapped") during text drag → \(Modifier.key(mods)) wheel")
         onShow?(mods, d)
     }
 
     func close() {
         chordTimer?.cancel(); chordTimer = nil; pending = []
         wheelOpen = false
+        shownMods = []
         onHide?()
     }
 }
