@@ -17,7 +17,17 @@ if CommandLine.arguments.contains("--self-test") {
     func check(_ name: String, _ got: Set<Modifier>, _ want: Set<Modifier>) { if got != want { failed += 1; print("FAIL \(name): \(Modifier.key(got)) != \(Modifier.key(want))") } else { print("ok   \(name)") } }
     check("⇧ then ⌘ → ⇧⌘", Modifier.toggled([.shift], [.command]), [.shift, .command])
     check("⇧⌘ then ⇧ → ⌘", Modifier.toggled([.shift, .command], [.shift]), [.command])
-    check("⇧ then ⇧ → nothing (closes)", Modifier.toggled([.shift], [.shift]), [])
+    check("⇧ then ⇧ → stays ⇧ (never none)", Modifier.toggled([.shift], [.shift]), [.shift])
+    check("⌃ then ⌃ → stays ⌃", Modifier.toggled([.control], [.control]), [.control])
+    check("⇧⌃ then ⇧⌃ together → stays ⇧⌃", Modifier.toggled([.shift, .control], [.shift, .control]), [.shift, .control])
+    // from every wheel, any tap sequence goes on: every wheel reaches every other, and none is ever empty
+    let all: [Set<Modifier>] = [[.shift], [.command], [.control], [.shift, .command], [.command, .control], [.shift, .control], [.shift, .command, .control]]
+    let singles: [Set<Modifier>] = [[.shift], [.command], [.control]]
+    for from in all {
+        var seen: Set<String> = [Modifier.key(from)], frontier = [from], dead = false
+        while !frontier.isEmpty { let cur = frontier.removeFirst(); for t in singles { let n = Modifier.toggled(cur, t); if n.isEmpty { dead = true }; if seen.insert(Modifier.key(n)).inserted { frontier.append(n) } } }
+        if dead || seen.count != 7 { failed += 1; print("FAIL from \(Modifier.key(from)): reaches \(seen.count) of 7\(dead ? ", hits an empty wheel" : "")") } else { print("ok   from \(Modifier.glyphs(from)) every wheel is reachable") }
+    }
     check("⌃ then ⇧⌘ together → all three", Modifier.toggled([.control], [.shift, .command]), [.shift, .command, .control])
     check("⇧⌘⌃ then ⌘⌃ together → ⇧", Modifier.toggled([.shift, .command, .control], [.command, .control]), [.shift])
     exit(failed == 0 ? 0 : 1)

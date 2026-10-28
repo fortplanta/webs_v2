@@ -96,10 +96,10 @@ final class GestureMonitor {
     }
 
     private func noteTaps(_ taps: Set<Modifier>) {
-        // with the wheel open, a tap toggles that key: the wheel changes to the combination that results (and closes if none is left)
+        // with the wheel open, a tap toggles that key: the wheel changes to the combination that results (never to none)
         if wheelOpen {
             let next = Modifier.toggled(shownMods, taps)
-            if next.isEmpty { Journal.trace("keys toggled off: wheel closed, drag kept"); close() } else { present(next) }
+            if next != shownMods { present(next) }
             return
         }
         pending.formUnion(taps)

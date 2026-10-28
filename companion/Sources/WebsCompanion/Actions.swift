@@ -11,8 +11,13 @@ enum Modifier: String, CaseIterable {
     /// The name the catalog uses for a set of modifiers: always in the order shift, command, control.
     static func key(_ mods: Set<Modifier>) -> String { allCases.filter { mods.contains($0) }.map(\.rawValue).joined(separator: "+") }
     /// With a wheel open, each key tapped flips that key in or out of the combination (⇧ open, tap ⌘ → ⇧⌘, tap ⇧ → ⌘), so one
-    /// drag can walk through every wheel. Taps that land together flip together. Nothing left means the wheel closes.
-    static func toggled(_ shown: Set<Modifier>, _ taps: Set<Modifier>) -> Set<Modifier> { shown.symmetricDifference(taps) }
+    /// drag can walk through every wheel. Taps that land together flip together. Flipping the last key off would leave no wheel
+    /// at all, a dead end that nothing could be tapped back out of, so that tap changes nothing: a wheel stays open (Esc or a
+    /// drop in the middle closes it), and from any wheel every other one is reachable.
+    static func toggled(_ shown: Set<Modifier>, _ taps: Set<Modifier>) -> Set<Modifier> {
+        let next = shown.symmetricDifference(taps)
+        return next.isEmpty ? shown : next
+    }
     static func glyphs(_ mods: Set<Modifier>) -> String { allCases.filter { mods.contains($0) }.map(\.glyph).joined() }
 }
 
