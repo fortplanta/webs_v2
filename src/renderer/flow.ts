@@ -1,7 +1,8 @@
-// Direction without arrowheads: a connection is a plain straight line, and which way it runs is shown by a slow, faint
+// Direction without arrowheads: a connection is a plain line (gently curved, see curve.ts), and which way it runs is shown by a slow, faint
 // brightening that travels along it from its origin toward its target and then rests before the next. Pure geometry
 // and timing, so it can be tested; FlowOverlay.tsx paints it.
 
+import { arrowPath, polylineLength, slicePolyline } from './curve';
 import type { El } from './sceneEdit';
 
 /** Seconds for one cycle of a pulse (travel plus rest). Slow on purpose: a web may have dozens of lines. */
@@ -20,6 +21,8 @@ export interface FlowEdge {
   id: string;
   /** Scene coordinates of the origin and the target. */
   x1: number; y1: number; x2: number; y2: number;
+  /** The line itself in scene coordinates (a polyline; many points when the line is curved). */
+  path: number[][];
   /** Stroke width in scene units. */
   width: number;
   /** 0–1, from the id: lines are out of step with each other so the canvas breathes rather than blinks. */
@@ -30,17 +33,17 @@ export interface Rect { x: number; y: number; width: number; height: number }
 
 const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return ((h >>> 0) % 10_000) / 10_000; };
 
-/** Directed connections: arrows flagged `customData.directed` (see flowify), straight, with both ends known. */
+/** Directed connections: arrows flagged `customData.directed` (see flowify), straight or curved, with both ends known. */
 export function flowEdges(elements: readonly El[]): FlowEdge[] {
   const out: FlowEdge[] = [];
   for (const e of elements) {
     if (e.isDeleted || e.type !== 'arrow' || !e.customData?.directed) continue;
-    const pts: number[][] = e.points ?? [];
-    if (pts.length < 2) continue;
-    const a = pts[0], b = pts[pts.length - 1];
-    const x1 = e.x + a[0], y1 = e.y + a[1], x2 = e.x + b[0], y2 = e.y + b[1];
+    const path = arrowPath(e);
+    if (path.length < 2) continue;
+    const a = path[0], b = path[path.length - 1];
+    const x1 = a[0], y1 = a[1], x2 = b[0], y2 = b[1];
     if (Math.hypot(x2 - x1, y2 - y1) < 8) continue;
-    out.push({ id: e.id, x1, y1, x2, y2, width: e.strokeWidth ?? 1, phase: hash(e.id) });
+    out.push({ id: e.id, x1, y1, x2, y2, path, width: e.strokeWidth ?? 1, phase: hash(e.id) });
   }
   return out;
 }
@@ -90,3 +93,7 @@ export function flowify(scene: El[]): El[] {
     return { ...e, startArrowhead: null, endArrowhead: null, customData: { ...e.customData, directed: true }, version: (e.version ?? 0) + 1, versionNonce: Math.floor(Math.random() * 2 ** 31) };
   });
 }
+
+/** The part of a line a pulse covers (scene coordinates, tail first), and how long the whole line is. */
+export function pulsePath(edge: Pick<FlowEdge, 'path'>, pulse: Pick<Pulse, 'from' | 'to'>): number[][] { return slicePolyline(edge.path, pulse.from, pulse.to); }
+export const edgeLength = (edge: Pick<FlowEdge, 'path'>): number => polylineLength(edge.path);

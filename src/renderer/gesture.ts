@@ -3,6 +3,7 @@
 // connections to cut them. Held with the right mouse button, or with L (link, branch) or K (knife, cut) held down while
 // dragging with the left. Pure geometry and decisions, so they can be tested; CanvasView wires the pointer to them.
 
+import { arrowPath } from './curve';
 import type { El } from './sceneEdit';
 
 export interface Pt { x: number; y: number }
@@ -37,9 +38,9 @@ export function cutTargets(elements: readonly El[], a: Pt, b: Pt): Cut[] {
   for (const e of elements) {
     if (e.isDeleted || e.type !== 'arrow' || !Array.isArray(e.points) || e.points.length < 2) continue;
     if (/^origin-\d+$/.test(e.id)) continue;
-    for (let k = 0; k < e.points.length - 1; k++) {
-      const p = { x: e.x + e.points[k][0], y: e.y + e.points[k][1] }, q = { x: e.x + e.points[k + 1][0], y: e.y + e.points[k + 1][1] };
-      if (segmentsCross(a, b, p, q)) { out.push({ id: e.id, kind: e.customData?.kind === 'tether' ? 'tether' : 'link' }); break; }
+    const path = arrowPath(e);
+    for (let k = 0; k < path.length - 1; k++) {
+      if (segmentsCross(a, b, { x: path[k][0], y: path[k][1] }, { x: path[k + 1][0], y: path[k + 1][1] })) { out.push({ id: e.id, kind: e.customData?.kind === 'tether' ? 'tether' : 'link' }); break; }
     }
   }
   return out;

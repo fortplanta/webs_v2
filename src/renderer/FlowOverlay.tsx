@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
-import { flowEdges, MAX_EDGES, MIN_ZOOM, obstacles, pulseAt, STILL_PULSE, type FlowEdge, type Pulse, type Rect } from './flow';
+import { edgeLength, flowEdges, MAX_EDGES, MIN_ZOOM, obstacles, pulseAt, pulsePath, STILL_PULSE, type FlowEdge, type Pulse, type Rect } from './flow';
 import type { El } from './sceneEdit';
 
 const cssColor = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
@@ -53,17 +53,17 @@ export function FlowOverlay({ api, hidden }: { api: ExcalidrawImperativeAPI | nu
         ctx!.lineCap = 'round';
         const seconds = now / 1000;
         for (const e of visible) {
-          const x1 = tx(e.x1), y1 = ty(e.y1), x2 = tx(e.x2), y2 = ty(e.y2);
-          const len = Math.hypot(x2 - x1, y2 - y1);
-          const p: Pulse | null = still ? STILL_PULSE : pulseAt(e, seconds, len);
+          const p: Pulse | null = still ? STILL_PULSE : pulseAt(e, seconds, edgeLength(e) * z);
           if (!p || p.alpha < 0.01) continue;
-          const sx = x1 + (x2 - x1) * p.from, sy = y1 + (y2 - y1) * p.from, ex = x1 + (x2 - x1) * p.to, ey = y1 + (y2 - y1) * p.to;
+          const seg = pulsePath(e, p);
+          if (seg.length < 2) continue;
+          const sx = tx(seg[0][0]), sy = ty(seg[0][1]), ex = tx(seg[seg.length - 1][0]), ey = ty(seg[seg.length - 1][1]);
           // brightest at the head, fading to nothing behind it
           const g = ctx!.createLinearGradient(sx, sy, ex, ey);
           g.addColorStop(0, withAlpha(colour, 0)); g.addColorStop(1, withAlpha(colour, p.alpha));
           ctx!.strokeStyle = g;
           ctx!.lineWidth = Math.max(1, e.width * z);
-          ctx!.beginPath(); ctx!.moveTo(sx, sy); ctx!.lineTo(ex, ey); ctx!.stroke();
+          ctx!.beginPath(); ctx!.moveTo(sx, sy); for (let i = 1; i < seg.length; i++) ctx!.lineTo(tx(seg[i][0]), ty(seg[i][1])); ctx!.stroke();
         }
         ctx!.restore();
       }

@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 import { ARRIVE_MS, arrivalHalo, breath, DONE_MS, doneRing } from './fx';
 import { sound } from './sound';
+import { liftToward } from './backdrop';
+import { DIM_ALPHA, focusSet } from './focus';
 import type { El } from './sceneEdit';
 
 type Rect = { x: number; y: number; w: number; h: number };
@@ -37,7 +39,7 @@ export function FxOverlay({ api, phase, hidden }: { api: ExcalidrawImperativeAPI
     const known = new Set<string>();
     let primed = false;
     const arrivals = new Map<string, number>();
-    let raf = 0, w = 0, h = 0, dpr = 1, lastArrival = 0;
+    let raf = 0, w = 0, h = 0, dpr = 1, lastArrival = 0, lastFrame = 0, dim = 0, lit: Set<string> | null = null;
 
     const size = () => { const r = el.getBoundingClientRect(); dpr = window.devicePixelRatio || 1; w = r.width; h = r.height; el.width = Math.round(w * dpr); el.height = Math.round(h * dpr); };
     const ro = new ResizeObserver(() => { size(); kick(); });
@@ -56,7 +58,7 @@ export function FxOverlay({ api, phase, hidden }: { api: ExcalidrawImperativeAPI
       // the first change is the scene as it was opened: nothing in it has "arrived"
       if (!primed && elements.length) primed = true;
       if (fresh && now - lastArrival > 100) { lastArrival = now; sound.play('arrive'); }
-      if (fresh) kick();
+      kick(); // the selection, pan and zoom move the dimming's holes too
     });
 
     function halo(r: Rect, grow: number, alpha: number, glint: number) {
@@ -73,6 +75,22 @@ export function FxOverlay({ api, phase, hidden }: { api: ExcalidrawImperativeAPI
       const a = api!.getAppState();
       const els = api!.getSceneElements() as unknown as El[];
       let busy = false;
+      // the rest of the canvas recedes while a card is selected
+      const ms = lastFrame ? Math.min(100, now - lastFrame) : 16.7; lastFrame = now;
+      const next = focusSet(els, new Set(Object.keys(a.selectedElementIds ?? {})));
+      if (next) lit = next;
+      const dimTarget = next ? 1 : 0;
+      dim = still ? dimTarget : liftToward(dim, dimTarget, ms);
+      if (dim !== dimTarget) busy = true;
+      if (dim > 0.004 && lit) {
+        ctx!.save();
+        ctx!.beginPath();
+        ctx!.rect(0, 0, w, h);
+        for (const e of els) if (!e.isDeleted && lit.has(e.id)) { const r = rectOf(e, a), pad = 6 * a.zoom.value; ctx!.rect(r.x - pad, r.y - pad, r.w + 2 * pad, r.h + 2 * pad); }
+        ctx!.clip('evenodd');
+        ctx!.fillStyle = `rgba(0,0,0,${DIM_ALPHA * dim})`; ctx!.fillRect(0, 0, w, h);
+        ctx!.restore();
+      } else if (!next) lit = null;
       if (!still) {
         for (const [id, t0] of arrivals) {
           const hl = arrivalHalo(now - t0);

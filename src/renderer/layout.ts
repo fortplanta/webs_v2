@@ -9,7 +9,8 @@
 
 import { cardLook, cardSize, cardTextSkeletons, groupFor } from './card';
 import { clip, clusterLabel, FRAG_H, FRAG_W, HEADER_H, wrap, edgeLabel } from './boxes';
-import { fanCenters, headerRing, KB_H, KB_W, kbRing, SEED_W } from './layout/organic';
+import { KB_H, KB_W, SEED_W } from './layout/organic';
+import { grownFan, grownHeaders, grownKbRing, type Tie } from './layout/grown';
 import { leash } from './layout/leash';
 import { TETHER_KIND } from './tether';
 import { cssVar } from './theme';
@@ -20,6 +21,17 @@ import type { WebModel } from './webModel';
 export { FRAG_H, FRAG_W };
 
 type Skeleton = Record<string, unknown>;
+
+/** Which collections belong near each other: a tangent ties two (weight 1), and each card that refers to a card elsewhere adds a little. */
+export function clusterTies(m: WebModel): Tie[] {
+  const clusterOf = new Map<string, number>();
+  m.clusters.forEach((c, ci) => c.slots.forEach(s => s?.kbPassageIds?.forEach(id => clusterOf.set(id, ci))));
+  const w = new Map<string, number>();
+  const add = (a: number, b: number, weight: number) => { if (a === b || a < 0 || b < 0 || a >= m.clusters.length || b >= m.clusters.length) return; const k = a < b ? `${a}-${b}` : `${b}-${a}`; w.set(k, (w.get(k) ?? 0) + weight); };
+  m.edges.forEach(e => add(e.source, e.target, 1));
+  m.clusters.forEach((c, ci) => c.slots.forEach(s => s?.relates?.forEach(r => { const to = clusterOf.get(r.to); if (to !== undefined) add(ci, to, 0.3); })));
+  return [...w].map(([k, weight]) => { const [a, b] = k.split('-').map(Number); return { a, b, weight }; });
+}
 
 export function buildSkeletons(m: WebModel): Skeleton[] {
   const out: Skeleton[] = [];
@@ -42,7 +54,7 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
   }
 
   // The notes it was built from, in a ring around it
-  const ring = kbRing(m.kb.length);
+  const ring = grownKbRing(m.kb.length);
   m.kb.forEach((p, i) => {
     out.push({
       type: 'rectangle', roughness: 0, id: `kb-${i}`,
@@ -53,7 +65,7 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
   });
 
   // Collections: header on the outer ring, cards fanned outward around it
-  const heads = headerRing(m.clusters.length);
+  const heads = grownHeaders(m.clusters.map(c => ({ size: c.slots.filter(s => !s?.dropped).length })), clusterTies(m));
   const arrows: Skeleton[] = [];
   const cardAt: Array<{ pid?: string; id: string }> = [];
   const hidden = new Set<number>(); // collections whose every card the narrator set aside
@@ -73,7 +85,7 @@ export function buildSkeletons(m: WebModel): Skeleton[] {
     const sizes = cluster.slots.map(f => (f ? cardSize(f) : { width: FRAG_W, height: FRAG_H }));
     cardAt.push(...visible.map(fi => ({ pid: cluster.slots[fi]?.kbPassageIds?.[0], id: `frag-${ci}-${fi}` })));
     // The card that matters most leads straight out; the rest branch off either side of it (see fanSlots)
-    const spotsVisible = fanCenters(visible.length, h, h.angle, Math.max(...visible.map(i => sizes[i].height), FRAG_H));
+    const spotsVisible = grownFan(visible.length, h, h.angle, Math.max(...visible.map(i => sizes[i].height), FRAG_H), `c${ci}`);
     const rank = [...visible].sort((a, b) => (cluster.slots[b]?.weight ?? 2) - (cluster.slots[a]?.weight ?? 2) || a - b);
     const spots = cluster.slots.map((_, fi) => spotsVisible[Math.max(rank.indexOf(fi), 0)]);
     cluster.slots.forEach((frag, fi) => {

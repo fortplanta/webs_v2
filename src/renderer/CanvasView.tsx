@@ -11,6 +11,7 @@ import { BottomToolbar } from './BottomToolbar';
 import type { Command } from './commands';
 import { TimelineView } from './TimelineView';
 import { LodOverlay } from './LodOverlay';
+import { BackdropOverlay } from './BackdropOverlay';
 import { FlowOverlay } from './FlowOverlay';
 import { FxOverlay } from './FxOverlay';
 import { sound } from './sound';
@@ -27,6 +28,8 @@ import { fragmentFromCapture, fragmentFromCompanion, fragmentFromPaste, looksLik
 import { ClusterEditor, ConnectPanel, EdgeEditor, FragmentEditor, ImageCardEditor, InboxPanel, type StickProps } from './Editors';
 import { hitTest } from './hit';
 import { useLiveLayout } from './layout/useLiveLayout';
+import { useCamera } from './layout/useCamera';
+import { fitTarget, viewFor, zoomBy } from './camera';
 import { addImageCard, imageCardLayout, type ImageCardData } from './imageCard';
 import { addPivotCluster, addThread, pivotFootprint, placePivot, threadLabelBox, usedPassageIds } from './pivot';
 import { addTether, removeTether, tetherOf } from './tether';
@@ -118,6 +121,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   // Layout stays hands-off until the user first touches the canvas, so reopening a saved web never rearranges it.
   const [touched, setTouched] = useState(false);
   const liveLayout = useLiveLayout(api, touched);
+  const camera = useCamera(api);
 
   useEffect(() => {
     if (!api || restored) return;
@@ -126,7 +130,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     const { signatures } = merged;
     const elements = dropOrphanPictures(merged.elements as El[]);
     applied.current = signatures;
-    api.updateScene({ elements: elements as any });
+    api.updateScene({ elements: liveLayout.stage(api.getSceneElements() as unknown as El[], elements as El[]) as any });
     setTouched(true); // fresh generations settle themselves from the start
 
     // Keep the whole web in view while it grows (collections arrive one after another and the web is centred on
@@ -189,7 +193,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   // ── Manual editing ────────────────────────────────────────────────────────
 
   const scene = () => [...(api!.getSceneElementsIncludingDeleted() as unknown as El[])];
-  const apply = (next: El[]) => api!.updateScene({ elements: next as any });
+  const apply = (next: El[]) => api!.updateScene({ elements: liveLayout.stage(scene(), next) as any });
   const byId = (id: string) => scene().find(e => e.id === id && !e.isDeleted);
 
   /** Selecting a card selects its whole group (box, title, footer), so dragging moves them together. */
@@ -270,7 +274,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   function reveal(bounds: { x: number; y: number; width: number; height: number }) {
     const a = api!.getAppState();
     const next = revealView({ scrollX: a.scrollX, scrollY: a.scrollY, zoom: a.zoom.value, width: a.width, height: a.height }, bounds);
-    if (next) api!.updateScene({ appState: { scrollX: next.scrollX, scrollY: next.scrollY, zoom: { value: next.zoom } } as any });
+    if (next) camera.glideTo(next);
   }
 
   /** Swap a card's content in place (used when the model's card replaces a draft excerpt). */
@@ -330,6 +334,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
 
   function onPointerDownCapture(e: React.PointerEvent) {
     navigated.current = true;
+    camera.release();
     if (!touched) setTouched(true);
     if (!api) return;
     if (sticking) {
@@ -766,9 +771,14 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
 
   function zoom(how: 'in' | 'out' | 'fit') {
     if (!api) return;
-    const z = api.getAppState().zoom.value;
-    if (how === 'fit') frame(api.getSceneElements() as unknown as El[], true);
-    else api.updateScene({ appState: { zoom: { value: Math.min(4, Math.max(0.05, how === 'in' ? z * 1.25 : z / 1.25)) } } as any });
+    const v = camera.view();
+    if (!v) return;
+    if (how === 'fit') {
+      const live = (api.getSceneElements() as unknown as El[]).filter(e => !e.isDeleted && e.type !== 'text');
+      if (!live.length) return;
+      const x0 = Math.min(...live.map(e => e.x)), y0 = Math.min(...live.map(e => e.y));
+      camera.glideTo(fitTarget(v, { x: x0, y: y0, width: Math.max(...live.map(e => e.x + e.width)) - x0, height: Math.max(...live.map(e => e.y + e.height)) - y0 }));
+    } else camera.glideTo(zoomBy(v, how === 'in' ? 1.25 : 0.8));
   }
 
   /** Bring a card into view: select and centre it on the map, or open it from the timeline. */
@@ -777,7 +787,8 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
     if (!api || !el) return;
     if (viewRef.current === 'timeline') { openEditor({ id, kind: 'fragment' }); return; }
     api.updateScene({ appState: selectionFor(id) as any });
-    api.scrollToContent(el as any, { animate: true, fitToViewport: false });
+    const v = camera.view();
+    if (v) camera.glideTo(viewFor(el.x + el.width / 2, el.y + el.height / 2, v.zoom, v.width, v.height));
   }
 
   /** The two cards the user has selected, if exactly two: the ends of a link they might draw. */
@@ -952,7 +963,8 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
   return (
     <div className="canvas">
       {view === 'timeline' && <TimelineView topic={model.query} cards={timelineCards} onOpen={(id, kind) => openEditor({ id, kind })} />}
-      <div ref={innerRef} className={`canvas-inner${sticking || connectFrom ? " sticking" : ""}`} onContextMenuCapture={e => { e.preventDefault(); e.stopPropagation(); }} style={view === 'timeline' ? { visibility: 'hidden', pointerEvents: 'none' } : undefined} onPointerDownCapture={onPointerDownCapture} onWheelCapture={() => { navigated.current = true; }} onDoubleClickCapture={onDoubleClickCapture} onDragOverCapture={onDragOverCapture} onDropCapture={onDropCapture}>
+      <div ref={innerRef} className={`canvas-inner${sticking || connectFrom ? " sticking" : ""}`} onContextMenuCapture={e => { e.preventDefault(); e.stopPropagation(); }} style={view === 'timeline' ? { visibility: 'hidden', pointerEvents: 'none' } : undefined} onPointerDownCapture={onPointerDownCapture} onWheelCapture={() => { navigated.current = true; camera.release(); }} onDoubleClickCapture={onDoubleClickCapture} onDragOverCapture={onDragOverCapture} onDropCapture={onDropCapture}>
+        <BackdropOverlay api={api} hidden={view === 'timeline'} />
         <Excalidraw
           excalidrawAPI={a => { setApi(a); if (import.meta.env.DEV) (window as unknown as { __api?: unknown }).__api = a; /* dev only: lets test scripts drive the canvas */ }}
           onChange={handleChange as any}
@@ -960,7 +972,7 @@ export function CanvasView({ webId, model, restoredScene, restoredFiles, onScene
           initialData={{
             files: Object.fromEntries((restoredFiles ?? []).map(f => [f.id, f])) as any,
             elements: restored ? (restoredScene as any) : undefined,
-            appState: { viewBackgroundColor: '#000000' },
+            appState: { viewBackgroundColor: 'transparent' }, // the backdrop behind it paints the surface (see BackdropOverlay)
           }}
         />
         <FlowOverlay api={api} hidden={view === 'timeline'} />

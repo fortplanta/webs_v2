@@ -20,5 +20,10 @@ syncFullscreen();
 // the interface's small sounds: unlock on the first gesture, tick over menus, tock on a press
 attachInterfaceSounds();
 
-// window.webs comes from the Electron preload script; in a plain browser tab it's absent.
-createRoot(document.getElementById('root')!).render(window.webs ? <><App /><UpdateBanner /></> : <NoBridge />);
+// window.webs comes from the Electron preload script; in a plain browser tab it's absent (in development, open `/?mock`
+// to get a stand-in for it, see devBridge.ts: it is left out of builds).
+async function boot() {
+  if (import.meta.env.DEV && !window.webs && new URLSearchParams(location.search).has('mock')) await import('./devBridge');
+  createRoot(document.getElementById('root')!).render(window.webs ? <><App /><UpdateBanner /></> : <NoBridge />);
+}
+void boot();

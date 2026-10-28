@@ -1,3 +1,4 @@
+import { arrowPath } from './curve';
 import type { El } from './sceneEdit';
 
 export type Hit = { id: string; kind: 'fragment' | 'cluster' | 'image' | 'edge' };
@@ -35,9 +36,9 @@ export function hitTest(elements: readonly El[], x: number, y: number, zoom: num
     if (e.isDeleted) continue;
 
     if (e.type === 'arrow' && Array.isArray(e.points) && e.points.length >= 2) {
-      for (let k = 0; k < e.points.length - 1; k++) {
-        const [a, b] = [e.points[k], e.points[k + 1]];
-        if (distToSegment(x, y, e.x + a[0], e.y + a[1], e.x + b[0], e.y + b[1]) <= tolerance) return { id: e.id, kind: 'edge' };
+      const path = arrowPath(e);
+      for (let k = 0; k < path.length - 1; k++) {
+        if (distToSegment(x, y, path[k][0], path[k][1], path[k + 1][0], path[k + 1][1]) <= tolerance) return { id: e.id, kind: 'edge' };
       }
       continue;
     }

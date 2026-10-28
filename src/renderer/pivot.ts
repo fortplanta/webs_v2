@@ -5,7 +5,8 @@ import type { GeneratedFragment } from '../backend/events';
 import { clusterLabel, edgeLabel, FRAG_H, FRAG_W, HEADER_H } from './boxes';
 import { addCard, cardSize } from './card';
 import { growthFrom } from './branch';
-import { clusterFootprint, fanCenters, findClusterSpot } from './layout/organic';
+import { clusterFootprint, findClusterSpot } from './layout/organic';
+import { grownFan } from './layout/grown';
 import { cssVar } from './theme';
 import { addBox, updateBox, type Build, type El } from './sceneEdit';
 
@@ -69,7 +70,7 @@ export function addPivotCluster(elements: El[], spec: PivotSpec, build: Build): 
   out = out.map(e => (e.id === headerId ? { ...e, strokeColor: cssVar('--color-header-stroke', '#2E2E2E'), roundness: null } : e));
   const sizes = spec.cards.map(cardSize);
   const tall = Math.max(...sizes.map(z => z.height), FRAG_H);
-  const spots = fanCenters(spec.cards.length, { x: spec.x + FRAG_W / 2, y: spec.y + HEADER_H / 2 }, spec.angle ?? 0, tall);
+  const spots = grownFan(spec.cards.length, { x: spec.x + FRAG_W / 2, y: spec.y + HEADER_H / 2 }, spec.angle ?? 0, tall, spec.id);
   const cardIds = spec.cards.map((fragment, i) => {
     const id = `${spec.id}-c${i}`;
     out = addCard(out, {
